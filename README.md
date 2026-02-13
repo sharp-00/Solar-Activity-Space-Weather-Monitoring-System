@@ -1,6 +1,6 @@
 # Solar-Activity-Space-Weather-Monitoring-System
 This repo is to design a reproducible monitoring and analytics system for solar activity and space weather indicators.
 By [1.Mulumudi Dinesh Karthik,
-2.Vansh Gupta,
+2.Vansh Gupta, hi
 3.Abhishek Menon, Hi
 4.Shailendra Pratap Singh]
