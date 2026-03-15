@@ -1,3 +1,4 @@
+#!/bin/bash
 echo "Download begins..."
 curl https://services.swpc.noaa.gov/json/planetary_k_index_1m.json -o data/planetary_k_index.json
 echo "One done"
