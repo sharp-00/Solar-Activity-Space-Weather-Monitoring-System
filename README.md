@@ -9,7 +9,7 @@ Collaborators:
 
 Downloading the data:
 
-1. Download the update_data.sh file.
+1. Download the update_data.sh file. [We are sourcing our data from https://services.swpc.noaa.gov/json/ ]
 
 2. On the Linux terminal, run the following command chmod +x update_data.sh
 
