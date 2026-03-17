@@ -22,28 +22,8 @@ solar_monitor/
     └── kp_merged_clean.csv            # GFZ historic + NOAA recent, merged
 ```
 
-## Setup & Run
 
-### 1. Create a virtual environment and install dependencies
-
-On **Arch-based systems** (EndeavourOS, Manjaro, etc.) pip is blocked system-wide.
-Use a virtual environment instead — this is the recommended approach on any system:
-
-```bash
-# Create the venv inside the project folder
-python3 -m venv venv
-
-# Activate it
-source venv/bin/activate
-
-# Install dependencies into the venv
-pip install -r requirements.txt
-```
-
-> You only need to create and install once. On future sessions just run
-> `source venv/bin/activate` before starting the app.
-
-### 2. First-time data download
+### First-time data download
 
 ```bash
 python3 download_data.py
@@ -57,7 +37,7 @@ This fetches:
 
 Large historical files are downloaded **once** and never re-fetched unless you delete them.
 
-### 3. Daily refresh (fast)
+### Daily refresh (fast)
 
 ```bash
 python5 download_data.py --refresh
@@ -66,7 +46,7 @@ python5 download_data.py --refresh
 Only re-fetches the last ~30 days of sunspot data and the latest NOAA Kp feed.
 The large historical files are untouched. Run this whenever you want up-to-date data.
 
-### 4. Launch the dashboard
+### Launch the dashboard
 
 ```bash
 python3 app.py
@@ -103,11 +83,7 @@ Global controls:
 | Kp Index (historic) | [GFZ Potsdam](https://www-app3.gfz-potsdam.de/kp_index/Kp_ap_Ap_SN_F107_since_1932.txt) | 1932–present | 3-hourly, downloaded once |
 | Kp Index (recent) | [NOAA SWPC](https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json) | Last ~7 days | Re-fetched on every refresh |
 
-### Why two Kp sources?
 
-The NOAA real-time JSON only provides the most recent ~7 days. For long-term analysis the GFZ (German Research Centre for Geosciences) maintains a definitive archive of all Kp values since 1932 in a single text file. The pipeline downloads the GFZ file once, then on each `--refresh` run overlays the latest NOAA readings on top. This gives a continuous 3-hourly Kp series from 1932 to today without re-downloading 90 years of data every time.
-
----
 
 ## Data Flow
 
