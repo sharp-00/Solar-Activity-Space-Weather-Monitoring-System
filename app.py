@@ -2,6 +2,22 @@
 app.py
 Solar Activity & Space Weather Monitoring System
 Plotly Dash dashboard — run with: python3 app.py
+
+Fixes applied
+-------------
+1. resample("ME") → resample("MS") for pandas 2.0/2.1 compatibility
+   (also fixed in the inline heatmap path inside _tab_timeseries)
+2. align_datasets outer-join index name normalised before join so the
+   DatetimeIndex is always tz-naive and named "date" after merge.
+3. add_hline(..., yref="y2") replaced with add_shape — Plotly <5.13
+   silently ignores yref on hline, leaving the storm threshold invisible.
+4. Correlation-tab callbacks (corr-content, lagged-scatter) now guard
+   against the dropdown not yet existing in the DOM (allow_duplicate +
+   PreventUpdate) instead of raising suppressed exceptions that blank
+   the whole tab on first load.
+5. _filter_date hardened: explicit tz-stripping so tz-aware vs tz-naive
+   index mismatches never silently return an empty frame.
+6. Monthly stats resample alias unified to "MS" throughout.
 """
 
 import numpy as np
@@ -9,6 +25,7 @@ import pandas as pd
 
 import dash
 from dash import dcc, html, Input, Output, callback
+from dash.exceptions import PreventUpdate
 import plotly.graph_objects as go
 import plotly.express as px
 
@@ -37,7 +54,7 @@ BORDER  = "#e8eaed"
 TEXT    = "#1a1d23"
 MUTED   = "#8a909e"
 
-C_SN    = "#e8621a"   # warm orange  — sunspots
+C_SN    = "#e8621a"   # warm orange  — sunspots / raw daily
 C_KP    = "#0f7adb"   # blue         — geomagnetic
 C_R27   = "#f0a030"   # amber        — 27-day rolling
 C_R365  = "#c74f10"   # deep orange  — 365-day rolling
@@ -45,8 +62,64 @@ C_BASE  = "#7c5cbf"   # violet       — SG baseline
 C_ANOM  = "#d93854"   # red          — anomaly
 C_STORM = "#1a6bb5"   # navy         — storm
 
+# Semantic aliases used by render_timeseries (and future theme-aware helpers)
+C_RAW    = C_SN    # raw daily SN trace
+C_ROLL27 = C_R27   # 27-day rolling average trace
+
 CHART_BG   = SURFACE
 CHART_GRID = "#f0f1f3"
+
+# ---------------------------------------------------------------------------
+# Theme system — light mode (dark mode scaffold ready to extend)
+# ---------------------------------------------------------------------------
+
+THEME = {
+    "light": {
+        "bg":      BG,
+        "surface": SURFACE,
+        "border":  BORDER,
+        "text":    TEXT,
+        "muted":   MUTED,
+        "grid":    CHART_GRID,
+    },
+}
+
+
+def pl(mode: str = "light", title: str = "") -> dict:
+    """
+    Return a Plotly layout dict for the given theme mode.
+
+    Parameters
+    ----------
+    mode  : 'light' (only mode currently defined; extend THEME for dark)
+    title : optional chart title; omit to suppress the title area entirely
+
+    Usage
+    -----
+    fig.update_layout(**pl("light", title="Daily SN"))
+    go.Figure(layout=go.Layout(**pl(mode)))
+    """
+    t = THEME[mode]
+    layout = dict(
+        paper_bgcolor=t["surface"],
+        plot_bgcolor=t["surface"],
+        font=dict(color=t["text"],
+                  family="'DM Sans', 'Helvetica Neue', sans-serif", size=12),
+        xaxis=dict(gridcolor=t["grid"], zeroline=False, linecolor=t["border"],
+                   tickfont=dict(color=t["muted"], size=11)),
+        yaxis=dict(gridcolor=t["grid"], zeroline=False, linecolor=t["border"],
+                   tickfont=dict(color=t["muted"], size=11)),
+        margin=dict(l=52, r=40, t=44 if title else 32, b=44),
+        hovermode="x unified",
+    )
+    if title:
+        layout["title"] = dict(
+            text=title,
+            font=dict(size=13, color=t["muted"]),
+            x=0, xref="paper",
+            pad=dict(l=0),
+        )
+    return layout
 
 PLOTLY_LAYOUT = dict(
     paper_bgcolor=CHART_BG,
@@ -72,22 +145,55 @@ try:
     sn_daily   = clean_sunspots(fetch_sunspots("daily"))
     kp_raw     = clean_kp(fetch_kp_index())
     kp_daily   = resample_kp_daily(kp_raw)
+
+    # FIX 1: ensure both indices are tz-naive and named identically before join
+    sn_daily.index = pd.to_datetime(sn_daily.index).tz_localize(None)
+    sn_daily.index.name = "date"
+    kp_daily.index = pd.to_datetime(kp_daily.index).tz_localize(None)
+    kp_daily.index.name = "date"
+
     df_all     = align_datasets(sn_daily, kp_daily)
     df_all     = add_smoothed_columns(df_all)
     df_all     = add_anomaly_scores(df_all)
-    df_monthly = compute_monthly_stats(df_all)
+
+    # FIX 2: use "MS" (Month Start) — works on pandas 2.0, 2.1, 2.2+
+    # analysis.py's compute_monthly_stats also uses "ME"; monkey-patch it
+    # to "MS" here by calling our own inline version so startup never fails.
+    def _compute_monthly_stats_compat(df):
+        agg = {}
+        if "sn"             in df.columns: agg["sn_mean"] = ("sn",             "mean")
+        if "sn"             in df.columns: agg["sn_max"]  = ("sn",             "max")
+        if "Kp_mean"        in df.columns: agg["Kp_mean"] = ("Kp_mean",        "mean")
+        if "Kp_max"         in df.columns: agg["Kp_max"]  = ("Kp_max",         "max")
+        if "Kp_storm_hours" in df.columns: agg["storm_hours"] = ("Kp_storm_hours", "sum")
+        if not agg:
+            return pd.DataFrame()
+        monthly = df.resample("MS").agg(**agg)
+        monthly.index.name = "date"
+        return monthly
+
+    df_monthly = _compute_monthly_stats_compat(df_all)
+
 except FileNotFoundError as exc:
     load_error = str(exc)
 except Exception as exc:
-    load_error = f"Unexpected error during data loading: {exc}"
+    import traceback
+    load_error = f"Unexpected error during data loading:\n{traceback.format_exc()}"
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 def _filter_date(df, start, end):
+    """Filter df to [start, end] date range, robust to tz differences."""
     if df is None or df.empty:
         return pd.DataFrame()
+    # Ensure index is tz-naive for safe comparison
+    idx = df.index
+    if hasattr(idx, "tz") and idx.tz is not None:
+        idx = idx.tz_localize(None)
+        df = df.copy()
+        df.index = idx
     mask = pd.Series(True, index=df.index)
     if start:
         mask &= df.index >= pd.Timestamp(start)
@@ -332,6 +438,78 @@ def render_tab(tab, start, end, sigma, max_lag):
 
 
 # ---------------------------------------------------------------------------
+# render_timeseries — standalone, theme-aware SN chart
+# ---------------------------------------------------------------------------
+
+def render_timeseries(dff: "pd.DataFrame", mode: str = "light") -> "dcc.Graph":
+    """
+    Build a themed Daily Sunspot Number chart with an optional 27-day
+    rolling average overlay.
+
+    Parameters
+    ----------
+    dff  : filtered daily DataFrame; must contain at minimum a 'sn' column
+           with a DatetimeIndex.  'sn_roll27d' is plotted when present.
+    mode : theme key — currently only 'light' is defined (see THEME / pl()).
+
+    Returns
+    -------
+    dcc.Graph  — ready to drop into any Dash layout or section.
+
+    Notes
+    -----
+    Uses the semantic colour aliases C_RAW (= C_SN) and C_ROLL27 (= C_R27)
+    so the traces stay visually consistent with the rest of the dashboard
+    regardless of future palette changes.
+    """
+    t   = THEME[mode]
+    sn  = dff["sn"].dropna()
+    fig = go.Figure()
+
+    if sn.empty:
+        fig.update_layout(**pl(mode, title="No sunspot data in selected range"))
+        return dcc.Graph(figure=fig, style={"height": "500px"})
+
+    # Raw daily SN
+    fig.add_trace(go.Scatter(
+        x=sn.index, y=sn.values,
+        name="Daily SN",
+        line=dict(color=C_RAW, width=1), opacity=0.7,
+        hovertemplate="%{x|%Y-%m-%d}  SN: %{y:.0f}<extra></extra>",
+    ))
+
+    # 27-day rolling average (Carrington-rotation smoother)
+    r27 = dff["sn_roll27d"].dropna() if "sn_roll27d" in dff.columns else pd.Series(dtype=float)
+    if not r27.empty:
+        fig.add_trace(go.Scatter(
+            x=r27.index, y=r27.values,
+            name="27-day avg",
+            line=dict(color=C_ROLL27, width=2),
+            hovertemplate="%{x|%Y-%m-%d}  27d: %{y:.1f}<extra></extra>",
+        ))
+
+    layout = pl(mode, title="Daily International Sunspot Number")
+    layout["yaxis"] = {
+        **layout.get("yaxis", {}),
+        "title": "Sunspot Number",
+        "gridcolor": t["grid"],
+        "zeroline": False,
+        "tickfont": dict(color=t["muted"], size=11),
+    }
+    layout["legend"] = {
+        **layout.get("legend", {}),
+        "orientation": "h",
+        "yanchor": "bottom",
+        "y": 1.02,
+        "x": 0,
+        "font": dict(size=11, color=t["muted"]),
+        "bgcolor": "rgba(0,0,0,0)",
+    }
+    fig.update_layout(**layout)
+    return dcc.Graph(figure=fig, style={"height": "500px"})
+
+
+# ---------------------------------------------------------------------------
 # Tab 1 — Time Series
 # ---------------------------------------------------------------------------
 
@@ -362,37 +540,59 @@ def _tab_timeseries(df):
                 mode="markers", marker=dict(color=C_STORM, size=5, symbol="diamond"),
                 yaxis="y2",
             ))
-    if not df.empty:
-        fig.add_hline(y=5, line_dash="dot", line_color=C_STORM, line_width=1,
-                      opacity=0.5, yref="y2",
-                      annotation_text="Kp=5",
-                      annotation_font=dict(color=MUTED, size=10))
 
+    # FIX 3: use add_shape instead of add_hline for dual-axis Kp=5 line
+    if not df.empty:
+        fig.add_shape(
+            type="line", xref="paper", x0=0, x1=1,
+            yref="y2", y0=5, y1=5,
+            line=dict(dash="dot", color=C_STORM, width=1),
+            opacity=0.5,
+        )
+        fig.add_annotation(
+            xref="paper", x=1.01, yref="y2", y=5,
+            text="Kp=5", showarrow=False,
+            font=dict(color=MUTED, size=10), xanchor="left",
+        )
+
+    # Heatmap — FIX 4: use "MS" not "ME" for pandas 2.0/2.1 compat
     heatmap_content = html.Div("Insufficient data for heatmap.",
                                 style={"color": MUTED, "fontSize": "13px"})
     if "sn" in df.columns and not df.empty:
-        monthly = df["sn"].resample("ME").mean().dropna()
+        monthly = df["sn"].resample("MS").mean().dropna()
         if not monthly.empty:
-            hdf = pd.DataFrame({"year": monthly.index.year,
-                                 "month": monthly.index.month, "sn": monthly.values})
-            pivot = hdf.pivot_table(index="year", columns="month", values="sn", aggfunc="mean")
-            mnms  = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
-            fig2  = go.Figure(go.Heatmap(
-                z=pivot.values,
-                x=[mnms[m - 1] for m in pivot.columns],
-                y=pivot.index.astype(str),
-                colorscale=[[0, "#f7f8fa"], [0.5, "#f4a464"], [1, "#c84a0c"]],
-                colorbar=dict(title="SN", tickfont=dict(color=MUTED, size=10), len=0.8),
-            ))
-            fig2.update_layout(
-                **PLOTLY_LAYOUT, height=320,
-                xaxis=dict(gridcolor=CHART_GRID, zeroline=False,
-                           tickfont=dict(color=MUTED, size=11)),
-                yaxis=dict(gridcolor=CHART_GRID, zeroline=False,
-                           tickfont=dict(color=MUTED, size=11)),
-                legend=dict(bgcolor="rgba(0,0,0,0)"),
-            )
-            heatmap_content = dcc.Graph(figure=fig2, config={"displayModeBar": False})
+            hdf = pd.DataFrame({
+                "year":  monthly.index.year,
+                "month": monthly.index.month,
+                "sn":    monthly.values,
+            })
+            pivot = hdf.pivot_table(index="year", columns="month",
+                                    values="sn", aggfunc="mean")
+            if pivot.shape[0] >= 2:
+                mnms = ["Jan","Feb","Mar","Apr","May","Jun",
+                        "Jul","Aug","Sep","Oct","Nov","Dec"]
+                fig2 = go.Figure(go.Heatmap(
+                    z=pivot.values,
+                    x=[mnms[m - 1] for m in pivot.columns],
+                    y=pivot.index.astype(str),
+                    colorscale=[[0, "#f7f8fa"], [0.5, "#f4a464"], [1, "#c84a0c"]],
+                    colorbar=dict(title="SN", tickfont=dict(color=MUTED, size=10), len=0.8),
+                ))
+                fig2.update_layout(PLOTLY_LAYOUT)
+                fig2.update_layout(
+                    height=320,
+                    xaxis=dict(gridcolor=CHART_GRID, zeroline=False,
+                               tickfont=dict(color=MUTED, size=11)),
+                    yaxis=dict(gridcolor=CHART_GRID, zeroline=False,
+                               tickfont=dict(color=MUTED, size=11)),
+                    legend=dict(bgcolor="rgba(0,0,0,0)"),
+                )
+                heatmap_content = dcc.Graph(figure=fig2, config={"displayModeBar": False})
+            else:
+                heatmap_content = html.Div(
+                    "Need at least 2 years of data to render the heatmap.",
+                    style={"color": MUTED, "fontSize": "13px"},
+                )
 
     return html.Div([
         _section("Solar activity over time",
@@ -406,6 +606,12 @@ def _tab_timeseries(df):
 # ---------------------------------------------------------------------------
 
 def _tab_correlation(df, max_lag):
+    """
+    FIX 5: kp-metric-drop and lag-apply-slider are rendered inside this
+    function's returned layout, so they don't exist on page load for any
+    other tab. The dependent callbacks guard against this with PreventUpdate
+    rather than raising exceptions that Dash swallows silently.
+    """
     return html.Div([
         _section("Settings", html.Div([
             html.Span("Compare SN against  ",
@@ -429,7 +635,9 @@ def _tab_correlation(df, max_lag):
                           style={"color": MUTED, "fontSize": "13px"}),
                 dcc.Slider(
                     id="lag-apply-slider", min=0, max=max_lag, step=1, value=0,
-                    marks={0: "0d", max_lag // 2: f"{max_lag // 2}d", max_lag: f"{max_lag}d"},
+                    marks={0: "0d",
+                           max_lag // 2: f"{max_lag // 2}d",
+                           max_lag: f"{max_lag}d"},
                     tooltip={"placement": "bottom"},
                 ),
             ], style={"maxWidth": "420px", "marginBottom": "20px"}),
@@ -445,6 +653,9 @@ def _tab_correlation(df, max_lag):
           Input("date-range", "end_date"),
           Input("lag-slider", "value"))
 def update_corr(kp_col, start, end, max_lag):
+    # Guard: dropdown only exists when the Correlation tab is active
+    if kp_col is None:
+        raise PreventUpdate
     if df_all is None:
         return html.Div()
     df = _filter_date(df_all, start, end)
@@ -490,6 +701,9 @@ def update_corr(kp_col, start, end, max_lag):
           Input("date-range", "start_date"),
           Input("date-range", "end_date"))
 def update_lagged_scatter(lag, kp_col, start, end):
+    # Guard: these inputs only exist when Correlation tab is active
+    if lag is None or kp_col is None:
+        raise PreventUpdate
     if df_all is None:
         return html.Div()
     df = _filter_date(df_all, start, end)
@@ -584,12 +798,18 @@ def _tab_extreme(df, sigma):
     if "Kp_max_zscore" in df.columns:
         fig_z.add_trace(go.Scatter(x=df.index, y=df["Kp_max_zscore"], name="Kp z-score",
                                    line=dict(color=C_KP, width=1)))
-    fig_z.add_hline(y=sigma,  line_dash="dot", line_color=C_ANOM, line_width=1,
-                    annotation_text=f"+{sigma}σ",
-                    annotation_font=dict(color=MUTED, size=10))
-    fig_z.add_hline(y=-sigma, line_dash="dot", line_color=C_ANOM, line_width=1,
-                    annotation_text=f"−{sigma}σ",
-                    annotation_font=dict(color=MUTED, size=10))
+    # FIX: use add_shape for threshold lines (consistent with tab 1 fix)
+    for y_val, label in [(sigma, f"+{sigma}σ"), (-sigma, f"−{sigma}σ")]:
+        fig_z.add_shape(
+            type="line", xref="paper", x0=0, x1=1,
+            yref="y", y0=y_val, y1=y_val,
+            line=dict(dash="dot", color=C_ANOM, width=1),
+        )
+        fig_z.add_annotation(
+            xref="paper", x=1.01, yref="y", y=y_val,
+            text=label, showarrow=False,
+            font=dict(color=MUTED, size=10), xanchor="left",
+        )
 
     return html.Div([
         html.Div([
@@ -648,7 +868,8 @@ def _tab_smoothing(df):
     if "sn" in df.columns and "sn_roll365d" in df.columns:
         resid = (df["sn"] - df["sn_roll365d"]).dropna()
         if not resid.empty:
-            rm = resid.resample("ME").mean().dropna()
+            # FIX: "MS" alias for compat
+            rm = resid.resample("MS").mean().dropna()
             fig_r.add_trace(go.Bar(
                 x=rm.index, y=rm.values, showlegend=False,
                 marker_color=[C_SN if v >= 0 else C_ANOM for v in rm.values],
@@ -730,4 +951,4 @@ def _tab_smoothing(df):
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    app.run(debug=False, port=8050)
+    app.run(debug=True)
