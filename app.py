@@ -181,6 +181,33 @@ except Exception as exc:
     load_error = f"Unexpected error during data loading:\n{traceback.format_exc()}"
 
 # ---------------------------------------------------------------------------
+# Startup data diagnostics
+# ---------------------------------------------------------------------------
+
+def _check_data_overlap():
+    if df_all is None or df_all.empty:
+        return
+    if "sn" not in df_all.columns or "Kp_max" not in df_all.columns:
+        return
+    sn_range = df_all["sn"].dropna().index
+    kp_range = df_all["Kp_max"].dropna().index
+    if sn_range.empty or kp_range.empty:
+        return
+    sn_max = sn_range.max()
+    kp_min = kp_range.min()
+    if sn_max < kp_min:
+        gap_days = (kp_min - sn_max).days
+        if gap_days > 14:
+            return f"No overlap between SN and Kp: SN ends {sn_max.date()} while Kp starts {kp_min.date()}. This is likely due source update lag; data is still valid."
+    elif kp_range.max() < sn_range.min():
+        gap_days = (sn_range.min() - kp_range.max()).days
+        if gap_days > 14:
+            return f"No overlap between SN and Kp: Kp ends {kp_range.max().date()} while SN starts {sn_range.min().date()}. This is likely due source update lag; data is still valid."
+    return None
+
+startup_issue = _check_data_overlap()
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -303,6 +330,23 @@ if load_error:
         html.Div("Run these commands first, then restart the app:",
                  style={"color": MUTED, "margin": "16px 0 8px", "fontSize": "13px"}),
         html.Code("python3 download_data.py", style={
+            "background": "#f0f1f3", "borderRadius": "6px",
+            "padding": "8px 14px", "fontSize": "14px", "fontWeight": "600", "color": TEXT,
+        }),
+    ], style={"fontFamily": "'DM Sans', sans-serif", "background": BG,
+              "minHeight": "100vh", "padding": "64px 48px", "color": TEXT})
+
+elif startup_issue is not None:
+    app.layout = html.Div([
+        html.Div("Data overlap issue", style={"color": C_ANOM, "fontWeight": "700",
+                                               "fontSize": "18px", "marginBottom": "12px"}),
+        html.Pre(startup_issue, style={
+            "background": "#fff5f6", "border": f"1px solid #fcc",
+            "borderRadius": "8px", "padding": "16px", "fontSize": "13px", "color": C_ANOM,
+        }),
+        html.Div("Please refresh SN/KP data and restart:",
+                 style={"color": MUTED, "margin": "16px 0 8px", "fontSize": "13px"}),
+        html.Code("python3 download_data.py --refresh", style={
             "background": "#f0f1f3", "borderRadius": "6px",
             "padding": "8px 14px", "fontSize": "14px", "fontWeight": "600", "color": TEXT,
         }),
@@ -662,9 +706,30 @@ def update_corr(kp_col, start, end, max_lag):
     if "sn" not in df.columns or kp_col not in df.columns:
         return html.Div(f"Column '{kp_col}' not available in this date range.",
                         style={"color": MUTED, "fontSize": "13px"})
-    cc = cross_correlation(df["sn"], df[kp_col], max_lag=max_lag).dropna(subset=["pearson_r"])
+    overlap = df[["sn", kp_col]].dropna()
+    if overlap.empty:
+        return html.Div(
+            "No overlapping SN + Kp data in this date range. Try expanding the range or refreshing data.",
+            style={"color": MUTED, "fontSize": "13px"},
+        )
+    if len(overlap) < 30:
+        return html.Div(
+            f"Only {len(overlap)} overlapping rows. At least ~30 overlapping days are recommended for meaningful correlation.",
+            style={"color": MUTED, "fontSize": "13px"},
+        )
+
+    cc = cross_correlation(df["sn"], df[kp_col], max_lag=max_lag)
+    if cc["n"].max() < 10 or cc["pearson_r"].dropna().empty:
+        return html.Div(
+            "Insufficient overlapping data after lagging. Ensure historical Kp data is loaded (download full Kp archive).",
+            style={"color": MUTED, "fontSize": "13px"},
+        )
+    cc = cc.dropna(subset=["pearson_r"])
     if cc.empty:
-        return html.Div("Insufficient overlapping data.", style={"color": MUTED})
+        return html.Div(
+            "Insufficient overlapping data after removing NaN correlations.",
+            style={"color": MUTED, "fontSize": "13px"},
+        )
 
     peak_row = cc.loc[cc["pearson_r"].abs().idxmax()]
     peak_lag = int(peak_row["lag_days"])
