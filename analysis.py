@@ -3,11 +3,6 @@ analysis.py
 Correlation analysis, extreme event detection, cycle phase, and monthly statistics.
 """
 
-import numpy as np
-import pandas as pd
-from scipy.stats import pearsonr
-
-
 # ---------------------------------------------------------------------------
 # Cross-correlation
 # ---------------------------------------------------------------------------
@@ -114,35 +109,89 @@ def solar_cycle_phase(
 
 
 # ---------------------------------------------------------------------------
-# Monthly statistics
+# Periodly statistics
 # ---------------------------------------------------------------------------
 
-def compute_monthly_stats(df: pd.DataFrame) -> pd.DataFrame:
+def compute_periodly_stats(df: pd.DataFrame, period: str) -> pd.DataFrame:
     """
-    Resample a daily DataFrame to monthly frequency.
-
-    Output columns
-    --------------
-    sn_mean, sn_max, Kp_mean, Kp_max, storm_hours
+    Resamples daily data into W, 2W, M, or Y periods with peak tracking.
     """
-    agg: dict[str, tuple] = {}
+    valid_periods = ['W', '2W', 'M', 'Y']
+    if period.upper().replace('E', '') not in valid_periods:
+        raise ValueError(f"Period must be in {valid_periods}")
 
+    agg = {}
     if "sn" in df.columns:
-        agg["sn_mean"] = ("sn", "mean")
-        agg["sn_max"] = ("sn", "max")
-
+        agg.update({"sn_mean": ("sn", "mean"), "sn_max": ("sn", "max")})
     if "Kp_mean" in df.columns:
         agg["Kp_mean"] = ("Kp_mean", "mean")
-
     if "Kp_max" in df.columns:
         agg["Kp_max"] = ("Kp_max", "max")
-
     if "Kp_storm_hours" in df.columns:
         agg["storm_hours"] = ("Kp_storm_hours", "sum")
 
-    if not agg:
-        return pd.DataFrame()
+    result = df.resample(period + "E").agg(**agg)
+    result.index.name = "date"
+    return result
 
-    monthly = df.resample("ME").agg(**agg)
-    monthly.index.name = "date"
-    return monthly
+# ---------------------------------------------------------------------------
+# Duty Cycle
+# ---------------------------------------------------------------------------
+
+def duty_cycle(df: pd.DataFrame, col: str, window: str) -> pd.DataFrame:
+    """
+    Quantifies reliability based on valid observations vs. expected time-steps.
+    Windows: '11YE' (Cycle), '10YE' (Decade), 'YE' (Annual), '27D' (Rotation)
+    """
+    config = {"11YE": 0.95, "10YE": 0.95, "YE": 0.90, "27D": 0.99}
+    
+    if window not in config:
+        raise ValueError(f"Invalid window. Use: {list(config.keys())}")
+
+    grouped = df[col].resample(window)
+    result = pd.DataFrame({
+        "expected_count": grouped.size(),
+        "actual_count": grouped.count()
+    })
+
+    result["duty_cycle"] = result["actual_count"] / result["expected_count"]
+    result["is_reliable"] = result["duty_cycle"] >= config[window]
+    return result
+
+# ----------------------------------------------------------------------------
+# Analyse Periodicity
+# ----------------------------------------------------------------------------
+
+def analyze_periodicity(series: pd.Series, method: str = 'fft', fs: float = 1.0) -> pd.DataFrame:
+    """
+    Identifies dominant cycles using FFT (Global) or CWT (Temporal evolution).
+    """
+    clean_series = series.dropna()
+    data = clean_series.values
+    data = data - np.mean(data) # Detrending
+    n = len(data)
+
+    if method == 'fft':
+        fft_values = np.fft.fft(data)
+        freqs = np.fft.fftfreq(n, d=1/fs)
+        idx = np.where(freqs > 0)[0]
+
+        results = pd.DataFrame({
+            "frequency": freqs[idx],
+            "period_years": (1 / freqs[idx]) / 365.25,
+            "amplitude": np.abs(fft_values)[idx]
+        })
+        return results.sort_values("amplitude", ascending=False).reset_index(drop=True)
+
+    elif method == 'wv':
+        scales = np.arange(365, 365 * 20, 15) # 1 to 20 year cycles
+        coeffs, freqs = pywt.cwt(data, scales, 'cmor1.5-1.0', sampling_period=1/fs)
+        power_matrix = np.abs(coeffs)**2
+        periods_yrs = (1 / freqs) / 365.25
+
+        peak_indices = np.argmax(power_matrix, axis=0)
+        return pd.DataFrame({
+            "dominant_period_yrs": periods_yrs[peak_indices],
+            "max_power": np.max(power_matrix, axis=0)
+        }, index=clean_series.index)
+
