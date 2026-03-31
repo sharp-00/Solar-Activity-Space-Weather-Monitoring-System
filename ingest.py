@@ -42,8 +42,7 @@ def fetch_kp_index() -> pd.DataFrame:
     Load the merged Kp index (GFZ historic 1932-present + NOAA recent).
 
     Falls back to the legacy kp_recent_clean.csv if the merged file does
-    not yet exist (i.e. user has not re-run download_data.py since the
-    update).
+    not yet exist.
 
     Returns
     -------
@@ -55,9 +54,8 @@ def fetch_kp_index() -> pd.DataFrame:
     if os.path.exists(merged_path):
         df = pd.read_csv(merged_path, index_col="time_tag", parse_dates=True)
     elif os.path.exists(legacy_path):
-        # Older setup — only the short NOAA feed is available
-        print("[ingest] kp_merged_clean.csv not found, using kp_recent_clean.csv. "
-              "Run: python3 download_data.py  to get the full 1932-present archive.")
+        print("[ingest] kp_merged_clean.csv not found, using legacy kp_recent_clean.csv. "
+              "Run: python3 download_data.py to get the full 1932-present archive.")
         df = pd.read_csv(legacy_path, index_col="time_tag", parse_dates=True)
     else:
         raise FileNotFoundError(
@@ -77,19 +75,37 @@ def load_historic_kp() -> pd.DataFrame | None:
     if not os.path.exists(path):
         return None
     try:
-        # Delegate parsing to download_data to avoid code duplication
         from download_data import _parse_gfz_kp_historic
         return _parse_gfz_kp_historic(path)
     except Exception:
         return None
 
 
-def fetch_flares() -> pd.DataFrame | None:
+def fetch_flares() -> pd.DataFrame:
     """
-    Load recent flare catalogue if available; returns None gracefully.
+    Load the continuous GOES X-ray flux (Solar Flare) dataset.
+    
+    Returns
+    -------
+    DataFrame indexed by 'time_tag' (DatetimeIndex) with columns:
+      energy_band, xray_flux
     """
-    path = os.path.join(DATA_DIR, "flares_recent_clean.csv")
-    if not os.path.exists(path):
-        return None
-    df = pd.read_csv(path, parse_dates=True)
+    path = _require(os.path.join(DATA_DIR, "solar_flare_clean.csv"))
+    df = pd.read_csv(path, index_col="time_tag", parse_dates=True)
+    df.index.name = "time_tag"
+    return df
+
+
+def fetch_dst() -> pd.DataFrame:
+    """
+    Load the continuous Geospace DST dataset.
+    
+    Returns
+    -------
+    DataFrame indexed by 'time_tag' (DatetimeIndex) with column:
+      dst
+    """
+    path = _require(os.path.join(DATA_DIR, "dst_clean.csv"))
+    df = pd.read_csv(path, index_col="time_tag", parse_dates=True)
+    df.index.name = "time_tag"
     return df

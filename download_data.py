@@ -5,20 +5,20 @@ Fetch solar/space-weather datasets and save clean CSVs to data/.
 Two modes
 ---------
 python3 download_data.py            # first-time setup: download everything
-python3 download_data.py --refresh  # daily use: only fetch recent data (fast)
+python3 download_data.py --refresh  # hourly/daily use: fetch & append new data
 
 Strategy
 --------
-Sunspots (SILSO)
-  - Historical file (silso_sunspots_daily.csv / monthly) is downloaded ONCE
-    and never re-fetched unless you delete it.
-  - --refresh re-downloads just the last ~30 days from SILSO's EISN feed
-    and merges them into the existing clean CSV, keeping the rest untouched.
+Sunspots & Kp: 
+  - Pulls deep historical files ONCE. 
+  - --refresh pulls real-time feeds and appends new timestamps.
 
-Kp index (GFZ + NOAA)
-  - kp_historic_gfz.txt  : GFZ full archive 1932-present, downloaded ONCE.
-  - noaa_kp_index.json   : NOAA real-time feed (~7 days), ALWAYS re-fetched.
-  - kp_merged_clean.csv  : result of merging both; rebuilt on every run.
+Solar Flare & DST (NOAA):
+  - Deep history for 1-minute flux/DST requires heavy NetCDF/monthly scraping.
+  - Instead, this script uses the 7-day rolling real-time feeds.
+  - Running `--refresh` hourly/daily seamlessly appends the newly available 
+    data to your local CSVs, organically building your historical archive 
+    moving forward without duplicating timestamps.
 """
 
 import argparse
@@ -38,9 +38,13 @@ os.makedirs(DATA_DIR, exist_ok=True)
 # ---------------------------------------------------------------------------
 SILSO_DAILY_URL   = "https://www.sidc.be/silso/DATA/SN_d_tot_V2.0.csv"
 SILSO_MONTHLY_URL = "https://www.sidc.be/silso/DATA/SN_m_tot_V2.0.csv"
-SILSO_RECENT_URL  = "https://www.sidc.be/silso/DATA/EISN/EISN_current.txt"  # last ~30 days
+SILSO_RECENT_URL  = "https://www.sidc.be/silso/DATA/EISN/EISN_current.txt"
 NOAA_KP_URL       = "https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json"
 GFZ_KP_HIST_URL   = "https://www-app3.gfz-potsdam.de/kp_index/Kp_ap_Ap_SN_F107_since_1932.txt"
+
+# High-resolution 7-day rolling feeds
+NOAA_FLARE_URL    = "https://services.swpc.noaa.gov/json/goes/primary/xrays-7-day.json"
+NOAA_DST_URL      = "https://services.swpc.noaa.gov/json/geospace/geospace_dst_7_day.json"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -53,14 +57,12 @@ def _get(url: str, timeout: int = 120) -> bytes:
     resp.raise_for_status()
     return resp.content
 
-
 def _save(name: str, data: bytes) -> str:
+    """Save raw bytes to disk."""
     path = os.path.join(DATA_DIR, name)
     with open(path, "wb") as fh:
         fh.write(data)
-    print(f"  [saved] {name}  ({os.path.getsize(path):,} bytes)")
     return path
-
 
 def _skip_or_fetch(name: str, url: str) -> str:
     """Download to data/<n> only if the file does not already exist."""
@@ -70,13 +72,28 @@ def _skip_or_fetch(name: str, url: str) -> str:
         return path
     return _save(name, _get(url))
 
+def _merge_timeseries(historic: pd.DataFrame, recent: pd.DataFrame, index_name: str) -> pd.DataFrame:
+    """
+    Safely merges new hourly/daily data into the historical archive.
+    Uses index deduplication so overlapping 7-day data never creates duplicates,
+    and recent API revisions overwrite older local data.
+    """
+    if historic is None or historic.empty:
+        recent.index.name = index_name
+        return recent
+    
+    # Concat both, sorting by index. 
+    # keep='last' ensures the most recently downloaded data overwrites the old.
+    combined = pd.concat([historic, recent])
+    combined = combined[~combined.index.duplicated(keep='last')].sort_index()
+    combined.index.name = index_name
+    return combined
 
 # ---------------------------------------------------------------------------
-# Sunspot parsers
+# Parsers
 # ---------------------------------------------------------------------------
 
 def _parse_silso_daily(raw_path: str) -> pd.DataFrame:
-    """Parse the full SILSO daily semicolon-separated file."""
     cols = ["year", "month", "day", "frac_year", "sn", "sn_err", "n_obs", "definitive"]
     df = pd.read_csv(raw_path, sep=";", header=None, names=cols)
     df["date"] = pd.to_datetime(dict(year=df["year"], month=df["month"], day=df["day"]))
@@ -85,9 +102,7 @@ def _parse_silso_daily(raw_path: str) -> pd.DataFrame:
     df["sn_err"] = df["sn_err"].replace(-1, np.nan).astype(float)
     return df[["sn", "sn_err", "n_obs", "definitive"]]
 
-
 def _parse_silso_monthly(raw_path: str) -> pd.DataFrame:
-    """Parse the full SILSO monthly semicolon-separated file."""
     cols = ["year", "month", "frac_year", "sn", "sn_err", "n_obs", "definitive"]
     df = pd.read_csv(raw_path, sep=";", header=None, names=cols)
     df["date"] = pd.to_datetime(dict(year=df["year"], month=df["month"], day=1))
@@ -96,22 +111,14 @@ def _parse_silso_monthly(raw_path: str) -> pd.DataFrame:
     df["sn_err"] = df["sn_err"].replace(-1, np.nan).astype(float)
     return df[["sn", "sn_err", "n_obs", "definitive"]]
 
-
 def _parse_silso_recent(raw_path: str) -> pd.DataFrame:
-    """
-    Parse SILSO EISN_current.txt — estimated daily sunspot number, last ~30 days.
-    Format: YYYY MM DD  SN  SN_err  n_obs
-    Lines starting with # are comments.
-    """
     rows = []
     with open(raw_path, "r") as fh:
         for line in fh:
             line = line.strip()
-            if not line or line.startswith("#"):
-                continue
+            if not line or line.startswith("#"): continue
             parts = line.split()
-            if len(parts) < 4:
-                continue
+            if len(parts) < 4: continue
             try:
                 year, month, day = int(parts[0]), int(parts[1]), int(parts[2])
                 sn     = float(parts[3]) if parts[3] not in ("-1", "999") else np.nan
@@ -122,226 +129,174 @@ def _parse_silso_recent(raw_path: str) -> pd.DataFrame:
                              "n_obs": n_obs, "definitive": 0})
             except (ValueError, IndexError):
                 continue
-    df = pd.DataFrame(rows).set_index("date").sort_index()
-    return df
-
-
-# ---------------------------------------------------------------------------
-# Kp parsers
-# ---------------------------------------------------------------------------
+    return pd.DataFrame(rows).set_index("date").sort_index()
 
 def _parse_gfz_kp_historic(raw_path: str) -> pd.DataFrame:
-    """
-    Parse the GFZ Kp_ap_Ap_SN_F107_since_1932.txt file.
-
-    Actual format (one row per UT day, columns space-separated):
-      YYYY MM DD days days_m BSR dB Kp1 Kp2 Kp3 Kp4 Kp5 Kp6 Kp7 Kp8 ...
-      col index:  0    1   2    3      4      5    6   7    8    9   10   11   12   13   14
-
-    Kp values are floats (e.g. 3.333) at column indices 7-14.
-    Missing values are indicated by -1.000.
-    Lines starting with # are header/comment lines.
-
-    Returns a DataFrame indexed by DatetimeIndex (3-hourly) with column 'Kp'.
-    """
     records = []
-    offsets_hours = [0, 3, 6, 9, 12, 15, 18, 21]  # 8 three-hour slots per day
-
+    offsets_hours = [0, 3, 6, 9, 12, 15, 18, 21]
     with open(raw_path, "r", encoding="utf-8", errors="replace") as fh:
         for line in fh:
             line = line.strip()
-            if not line or line.startswith("#"):
-                continue
+            if not line or line.startswith("#"): continue
             parts = line.split()
-            if len(parts) < 15:
-                continue
+            if len(parts) < 15: continue
             try:
                 year, month, day = int(parts[0]), int(parts[1]), int(parts[2])
-                # Kp1-Kp8 are float values at index 7 through 14
                 kp_vals = [float(p) for p in parts[7:15]]
                 base = pd.Timestamp(year, month, day)
                 for i, kp in enumerate(kp_vals):
-                    if kp < 0:          # -1.000 means missing
-                        kp = float("nan")
+                    if kp < 0: kp = float("nan")
                     ts = base + pd.Timedelta(hours=offsets_hours[i])
                     records.append({"time_tag": ts, "Kp": kp})
             except (ValueError, IndexError):
                 continue
-
     df = pd.DataFrame(records).set_index("time_tag").sort_index()
     df["Kp"] = df["Kp"].clip(0, 9)
     return df
 
-
 def _parse_noaa_kp_recent(raw_path: str) -> pd.DataFrame:
-    """Parse NOAA 3-hourly Kp JSON. Row 0 is the header."""
-    with open(raw_path, "r") as fh:
-        data = json.load(fh)
-    headers = data[0]
-    rows = data[1:]
-    df = pd.DataFrame(rows, columns=headers)
+    with open(raw_path, "r") as fh: data = json.load(fh)
+    df = pd.DataFrame(data[1:], columns=data[0])
     df["time_tag"] = pd.to_datetime(df["time_tag"], utc=True).dt.tz_localize(None)
     df = df.set_index("time_tag").sort_index()
     df["Kp"] = pd.to_numeric(df["Kp"], errors="coerce").clip(0, 9)
     return df[["Kp"]]
 
+def _parse_noaa_flare(raw_path: str) -> pd.DataFrame:
+    with open(raw_path, "r") as fh: data = json.load(fh)
+    df = pd.DataFrame(data)
+    df["time_tag"] = pd.to_datetime(df["time_tag"], utc=True).dt.tz_localize(None)
+    df = df.rename(columns={"flux": "xray_flux", "energy": "energy_band"})
+    df = df[["time_tag", "energy_band", "xray_flux"]].dropna()
+    return df.set_index("time_tag").sort_index()
+
+def _parse_noaa_dst(raw_path: str) -> pd.DataFrame:
+    with open(raw_path, "r") as fh: data = json.load(fh)
+    df = pd.DataFrame(data)
+    df["time_tag"] = pd.to_datetime(df["time_tag"], utc=True).dt.tz_localize(None)
+    if "dst" in df.columns:
+        df["dst"] = pd.to_numeric(df["dst"], errors="coerce")
+    df = df[["time_tag", "dst"]].dropna()
+    return df.set_index("time_tag").sort_index()
 
 # ---------------------------------------------------------------------------
-# Merge helpers
-# ---------------------------------------------------------------------------
-
-def _merge_kp(historic: pd.DataFrame, recent: pd.DataFrame) -> pd.DataFrame:
-    """
-    Combine GFZ historic and NOAA recent Kp into one 3-hourly series.
-    Recent data takes priority for any overlapping timestamps.
-    """
-    combined = historic[~historic.index.isin(recent.index)]
-    combined = pd.concat([combined, recent]).sort_index()
-    combined.index.name = "time_tag"
-    return combined
-
-
-def _merge_sunspots(historic: pd.DataFrame, recent: pd.DataFrame) -> pd.DataFrame:
-    """
-    Overlay recent sunspot readings on top of the historic series.
-    Recent rows overwrite historic rows for the same dates.
-    """
-    combined = historic[~historic.index.isin(recent.index)]
-    combined = pd.concat([combined, recent]).sort_index()
-    combined.index.name = "date"
-    return combined
-
-
-# ---------------------------------------------------------------------------
-# First-time setup
+# Core Routines
 # ---------------------------------------------------------------------------
 
 def setup():
-    """Download all data for the first time. Skips files already on disk."""
-    print("\n=== Solar Monitor: first-time data setup ===\n")
+    """First-time run: Fetches available history and establishes baselines."""
+    print("\n=== Solar Monitor: First-Time Data Setup ===\n")
 
-    # -- Sunspots historical (skip if already downloaded) --
+    # -- Sunspots --
     raw_daily = _skip_or_fetch("silso_sunspots_daily.csv", SILSO_DAILY_URL)
     df = _parse_silso_daily(raw_daily)
-    out = os.path.join(DATA_DIR, "sunspots_daily_clean.csv")
-    df.to_csv(out)
-    print(f"  [clean] sunspots_daily_clean.csv — {len(df):,} rows "
-          f"({df.index.min().date()} -> {df.index.max().date()})\n")
+    df.to_csv(os.path.join(DATA_DIR, "sunspots_daily_clean.csv"))
+    print(f"  [clean] sunspots_daily_clean.csv — {len(df):,} rows")
 
     raw_monthly = _skip_or_fetch("silso_sunspots_monthly.csv", SILSO_MONTHLY_URL)
     df = _parse_silso_monthly(raw_monthly)
-    out = os.path.join(DATA_DIR, "sunspots_monthly_clean.csv")
-    df.to_csv(out)
-    print(f"  [clean] sunspots_monthly_clean.csv — {len(df):,} rows "
-          f"({df.index.min().date()} -> {df.index.max().date()})\n")
+    df.to_csv(os.path.join(DATA_DIR, "sunspots_monthly_clean.csv"))
+    print(f"  [clean] sunspots_monthly_clean.csv — {len(df):,} rows")
 
-    # -- Kp historic (GFZ, skip if already downloaded) --
+    # -- Kp Index --
     raw_gfz = _skip_or_fetch("kp_historic_gfz.txt", GFZ_KP_HIST_URL)
     kp_hist = _parse_gfz_kp_historic(raw_gfz)
-    print(f"  [parsed] GFZ Kp: {len(kp_hist):,} 3-hourly rows "
-          f"({kp_hist.index.min().date()} -> {kp_hist.index.max().date()})")
-
-    # -- Kp recent (NOAA, always fetch) --
-    noaa_raw  = _save("noaa_kp_index.json", _get(NOAA_KP_URL))
+    noaa_raw = _save("noaa_kp_index.json", _get(NOAA_KP_URL))
     kp_recent = _parse_noaa_kp_recent(noaa_raw)
-    print(f"  [parsed] NOAA Kp: {len(kp_recent):,} rows "
-          f"({kp_recent.index.min().date()} -> {kp_recent.index.max().date()})")
+    kp_merged = _merge_timeseries(kp_hist, kp_recent, "time_tag")
+    kp_merged.to_csv(os.path.join(DATA_DIR, "kp_merged_clean.csv"))
+    print(f"  [clean] kp_merged_clean.csv — {len(kp_merged):,} rows")
 
-    # -- Merge and save Kp --
-    kp_merged = _merge_kp(kp_hist, kp_recent)
-    out = os.path.join(DATA_DIR, "kp_merged_clean.csv")
-    kp_merged.to_csv(out)
-    print(f"  [clean] kp_merged_clean.csv — {len(kp_merged):,} rows "
-          f"({kp_merged.index.min().date()} -> {kp_merged.index.max().date()})\n")
+    # -- Solar Flare (Init with 7-days) --
+    flare_raw = _save("solar_flare_raw.json", _get(NOAA_FLARE_URL))
+    flare_df = _parse_noaa_flare(flare_raw)
+    flare_df.to_csv(os.path.join(DATA_DIR, "solar_flare_clean.csv"))
+    print(f"  [clean] solar_flare_clean.csv — {len(flare_df):,} rows")
 
-    _print_summary()
-
-
-# ---------------------------------------------------------------------------
-# Refresh (fast — only recent data)
-# ---------------------------------------------------------------------------
+    # -- DST (Init with 7-days) --
+    dst_raw = _save("dst_raw.json", _get(NOAA_DST_URL))
+    dst_df = _parse_noaa_dst(dst_raw)
+    dst_df.to_csv(os.path.join(DATA_DIR, "dst_clean.csv"))
+    print(f"  [clean] dst_clean.csv — {len(dst_df):,} rows\n")
 
 def refresh():
     """
-    Quick daily refresh: only re-fetch the last ~30 days of sunspots and
-    the latest NOAA Kp feed, then merge into existing clean CSVs.
-    The large historical files are never re-downloaded.
+    Hourly/Daily update routine. Safe to run on a cron job.
+    Fetches newly available data and dynamically appends it to your CSVs.
     """
-    print("\n=== Solar Monitor: refreshing recent data ===\n")
+    print("\n=== Solar Monitor: Hourly/Daily Refresh ===\n")
 
-    # -- Verify historical files are present --
-    for fname in ("sunspots_daily_clean.csv", "kp_historic_gfz.txt"):
-        if not os.path.exists(os.path.join(DATA_DIR, fname)):
-            print(f"  [error] {fname} not found — run without --refresh first.")
-            sys.exit(1)
-
-    # -- Recent sunspots --
+    # -- Sunspots --
     try:
         recent_path = _save("silso_sunspots_recent.txt", _get(SILSO_RECENT_URL))
         df_recent   = _parse_silso_recent(recent_path)
+        csv_path    = os.path.join(DATA_DIR, "sunspots_daily_clean.csv")
+        if os.path.exists(csv_path):
+            df_hist = pd.read_csv(csv_path, index_col="date", parse_dates=True)
+            df_merged = _merge_timeseries(df_hist, df_recent, "date")
+            df_merged.to_csv(csv_path)
+            print(f"  [appended] sunspots_daily_clean.csv — Latest: {df_merged.index.max().date()}")
+    except Exception as exc: print(f"  [warn] Sunspot refresh failed: {exc}")
 
-        existing_path = os.path.join(DATA_DIR, "sunspots_daily_clean.csv")
-        df_hist   = pd.read_csv(existing_path, index_col="date", parse_dates=True)
-        df_merged = _merge_sunspots(df_hist, df_recent)
-        df_merged.to_csv(existing_path)
-        print(f"  [merged] sunspots_daily_clean.csv — "
-              f"latest: {df_merged.index.max().date()}\n")
-    except Exception as exc:
-        print(f"  [warn] Could not refresh sunspot data: {exc}")
-
-    # -- Recent Kp --
+    # -- Kp Index --
     try:
         noaa_raw  = _save("noaa_kp_index.json", _get(NOAA_KP_URL))
         kp_recent = _parse_noaa_kp_recent(noaa_raw)
+        csv_path = os.path.join(DATA_DIR, "kp_merged_clean.csv")
+        if os.path.exists(csv_path):
+            kp_hist = pd.read_csv(csv_path, index_col="time_tag", parse_dates=True)
+            kp_merged = _merge_timeseries(kp_hist, kp_recent, "time_tag")
+            kp_merged.to_csv(csv_path)
+            print(f"  [appended] kp_merged_clean.csv — Latest: {kp_merged.index.max()}")
+    except Exception as exc: print(f"  [warn] Kp refresh failed: {exc}")
 
-        gfz_path  = os.path.join(DATA_DIR, "kp_historic_gfz.txt")
-        kp_hist   = _parse_gfz_kp_historic(gfz_path)
-        kp_merged = _merge_kp(kp_hist, kp_recent)
+    # -- Solar Flare --
+    try:
+        flare_raw = _save("solar_flare_raw.json", _get(NOAA_FLARE_URL))
+        flare_recent = _parse_noaa_flare(flare_raw)
+        csv_path = os.path.join(DATA_DIR, "solar_flare_clean.csv")
+        if os.path.exists(csv_path):
+            flare_hist = pd.read_csv(csv_path, index_col="time_tag", parse_dates=True)
+            flare_merged = _merge_timeseries(flare_hist, flare_recent, "time_tag")
+            flare_merged.to_csv(csv_path)
+            print(f"  [appended] solar_flare_clean.csv — Latest: {flare_merged.index.max()}")
+    except Exception as exc: print(f"  [warn] Solar Flare refresh failed: {exc}")
 
-        out = os.path.join(DATA_DIR, "kp_merged_clean.csv")
-        kp_merged.to_csv(out)
-        print(f"  [merged] kp_merged_clean.csv — "
-              f"latest: {kp_merged.index.max().date()}\n")
-    except Exception as exc:
-        print(f"  [warn] Could not refresh Kp data: {exc}")
-
-    _print_summary()
-
-
-# ---------------------------------------------------------------------------
-# Summary
-# ---------------------------------------------------------------------------
-
-def _print_summary():
-    print("=== data/ contents ===")
-    for fname in sorted(os.listdir(DATA_DIR)):
-        fpath = os.path.join(DATA_DIR, fname)
-        print(f"  {fname:45s}  {os.path.getsize(fpath):>10,} bytes")
-    print()
-
-
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
+    # -- DST --
+    try:
+        dst_raw = _save("dst_raw.json", _get(NOAA_DST_URL))
+        dst_recent = _parse_noaa_dst(dst_raw)
+        csv_path = os.path.join(DATA_DIR, "dst_clean.csv")
+        if os.path.exists(csv_path):
+            dst_hist = pd.read_csv(csv_path, index_col="time_tag", parse_dates=True)
+            dst_merged = _merge_timeseries(dst_hist, dst_recent, "time_tag")
+            dst_merged.to_csv(csv_path)
+            print(f"  [appended] dst_clean.csv — Latest: {dst_merged.index.max()}")
+    except Exception as exc: print(f"  [warn] DST refresh failed: {exc}")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Solar Monitor data downloader",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=(
-            "Examples:\n"
-            "  python3 download_data.py            # first-time setup\n"
-            "  python3 download_data.py --refresh  # quick daily update\n"
-        ),
-    )
-    parser.add_argument(
-        "--refresh", action="store_true",
-        help="Only re-fetch recent data; skip large historical downloads."
-    )
+    parser = argparse.ArgumentParser(description="Space Weather Data Downloader")
+    parser.add_argument("--refresh", action="store_true", help="Fetch and safely append newly available hourly/daily data.")
     args = parser.parse_args()
 
     if args.refresh:
         refresh()
     else:
         setup()
-        print("Done. Run: python3 app.py")
+        print("Done. Ready for pipeline/analysis.")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
