@@ -40,7 +40,7 @@ Large historical files are downloaded **once** and never re-fetched unless you d
 ### Daily refresh (fast)
 
 ```bash
-python5 download_data.py --refresh
+python3 download_data.py --refresh
 ```
 
 Only re-fetches the last ~30 days of sunspot data and the latest NOAA Kp feed.
