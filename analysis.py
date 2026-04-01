@@ -3,6 +3,12 @@ analysis.py
 Correlation analysis, extreme event detection, cycle phase, and monthly statistics.
 """
 
+import numpy as np
+import pandas as pd
+from scipy.stats import pearsonr
+import pywt
+import matplotlib.pyplot as plt
+
 # ---------------------------------------------------------------------------
 # Cross-correlation
 # ---------------------------------------------------------------------------
@@ -134,6 +140,11 @@ def compute_periodly_stats(df: pd.DataFrame, period: str) -> pd.DataFrame:
     result.index.name = "date"
     return result
 
+
+def compute_monthly_stats(df: pd.DataFrame) -> pd.DataFrame:
+    """Resample daily data into monthly aggregates with peak tracking."""
+    return compute_periodly_stats(df, "M")
+
 # ---------------------------------------------------------------------------
 # Duty Cycle
 # ---------------------------------------------------------------------------
@@ -224,9 +235,6 @@ def predictive_dominance(df: pd.DataFrame, max_lag: int = 14):
 # ----------------------------------------------------------------------------------
 # Phase Locked Analysis
 # ----------------------------------------------------------------------------------
-
-import numpy as np
-import pandas as pd
 
 def analyze_phase_locked_climatology(
     df: pd.DataFrame,
