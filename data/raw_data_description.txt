@@ -1,0 +1,49 @@
+Raw data used by the Solar Activity Space Weather Monitoring System
+
+Location:
+- data/raw/
+
+Files and source meaning:
+- dgd_{YEAR}.txt and dgd_{YEAR}q{Q}.txt: Dst geomagnetic disturbance index (daily or subdaily) from Kyoto WDC.
+- dgd_1996_present.txt: concatenated Dst data from 1996 to present.
+- dsd_{YEAR}.txt and dsd_{YEAR}q{Q}.txt: Solar Disturbance data (or related secondary dataset) from source, with per-year and per-quarter splits.
+- dsd_1996_present.txt: concatenated Dsd data from 1996 to present.
+
+Derived/cleanup files (in data/, not raw):
+- dst_hourly.csv
+- kp_recent_clean.csv
+- noaa_kp_index.json
+- silso_sunspots_daily.csv
+- silso_sunspots_monthly.csv
+- solar_weather_daily.csv
+- sunspots_daily_clean.csv
+- sunspots_monthly_clean.csv
+
+Usage:
+- ingest.py downloads raw source files from external services and stores them under data/raw.
+- pipeline.py and analysis.py process these to create cleaned CSV/JSON datasets.
+
+Data source and meaning:
+- Dst data: from Kyoto World Data Center (WDC) geomagnetic disturbance index service.
+- Kp data: from NOAA or international geomagnetic index services (raw in noaa_kp_index.json and kp_recent_clean.csv).
+- Sunspots data: from SILSO (Sunspot Index and Long-term Solar Observations) daily/monthly sunspot counts.
+
+Type of data and format:
+- Raw inputs are ASCII/space-delimited text or fixed-width text files.
+- Dst: daily or hourly magnetic disturbance index values (e.g., -50..+50 nanotesla units), specific columns such as date, hour, Dst value.
+- Dsd: related disturbance or solar dataset (same time resolution, extracted from source archive). Each row is a timestamped measurement.
+- Cleaned files: CSV (comma-separated) and JSON.
+
+Date range:
+- `dgd_1996_present.txt` and `dsd_1996_present.txt` cover ~1996 through latest available month/year from source.
+- Per-year files: `dgd_YYYY.txt` / `dsd_YYYY.txt` indicate full-year split.
+- Quarter files: `dgd_YYYYqQ.txt` / `dsd_YYYYqQ.txt` indicate partial-year quarterly split for incremental ingestion.
+
+Value ranges:
+- Dst values typically range -500 to +100 nanoTesla; common quiet day values -20..+20.
+- Kp index range 0 to 9 (fractional tenths), measuring planetary magnetic activity.
+- Sunspot number raw range 0..200+ depending on solar cycle phase.
+
+Notes:
+- raw files are typically ASCII/space-delimited text with header lines from data providers.
+- date ranges and completeness depend on archive availability per year/quarter.
