@@ -1,0 +1,33 @@
+Solar Activity Monitoring — Ingest Manifest
+Generated : 2026-03-28 20:52:42 UTC
+Version   : v5 (multi-source Dst)
+Period    : 1986-present
+============================================================
+
+NOTE: Flare event-level data (class/time) only available
+      for 1996-2016 from NGDC legacy XRS archive. Flare counts
+      will be NaN from 1986-1993.
+
+[OK] SSN (SILSO)
+  Path : data/raw/ssn_daily.txt
+  Size : 2821.4 KB
+
+[OK] Flares + DSD (NCEI)
+  Path : data/raw/dsd_1996_present.txt
+  Size : 895.7 KB
+
+[FAILED] Kp (GFZ API)
+  Error: [Kp/GFZ-API] All 3 attempts failed. URL: https://kp.gfz.de/app/json/?start=1986-01-01T00:00:00Z&end=2026-03-28T23:59:59Z&index=Kp,ap,Ap,SN,Fobs,Fadj&status=def,nowcast
+
+[OK] DGD/Kp cross-check (NCEI)
+  Path : data/raw/dgd_1996_present.txt
+  Size : 989.3 KB
+
+[OK] Dst (NASA OMNI)
+  Path : data/raw/dst_kyoto_hourly.txt
+  Size : 887.2 KB
+
+[OK] F10.7 recent (NOAA SWPC)
+  Path : data/raw/f107_recent.json
+  Size : 22.7 KB
+
