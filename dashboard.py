@@ -73,9 +73,33 @@ st.markdown("""
 @st.cache_data(ttl=900)
 def load_data():
     csv_path = Path("data/clean/solar_weather_daily.csv")
+    
     if not csv_path.exists():
-        st.error(f"Data file not found at {csv_path}. Please run the pipeline first.")
-        st.stop()
+        st.warning("⚠️ **First-time setup detected.** High-fidelity solar telemetry is missing from the cloud environment.")
+        
+        with st.status("🚀 **Initializing Data Pipeline...**", expanded=True) as status:
+            import subprocess
+            import os
+            
+            st.write("1. 📥 **Fetching raw data from NASA/NOAA/SILSO...**")
+            ingest_process = subprocess.run([sys.executable, "ingest.py"], capture_output=True, text=True)
+            if ingest_process.returncode != 0:
+                st.error("Data ingestion failed. Check network connectivity.")
+                st.code(ingest_process.stderr)
+                st.stop()
+            
+            st.write("2. 🧹 **Harmonizing and cleaning datasets...**")
+            clean_process = subprocess.run([sys.executable, "clean.py"], capture_output=True, text=True)
+            if clean_process.returncode != 0:
+                st.error("Data cleaning failed.")
+                st.code(clean_process.stderr)
+                st.stop()
+            
+            status.update(label="✅ **Data Pipeline Synchronization Complete!**", state="complete", expanded=False)
+        
+        st.success("Modernized dataset is now synchronized. Reloading dashboard components...")
+        st.rerun()
+
     dataframe = pd.read_csv(csv_path, parse_dates=["date"], index_col="date")
     return dataframe
 
