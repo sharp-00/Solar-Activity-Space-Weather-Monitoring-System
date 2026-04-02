@@ -15,6 +15,13 @@ import plotly.graph_objects as go
 from scipy.signal import savgol_filter
 from pathlib import Path
 from streamlit_option_menu import option_menu
+import sys
+sys.path.insert(0, str(Path(__file__).parent))
+from analysis import (
+    cross_correlation, find_extreme_events, solar_cycle_phase,
+    compute_monthly_stats, analyze_periodicity, predictive_dominance,
+    analyze_phase_locked_climatology, analyze_hysteresis
+)
 
 # ---------------------------------------------------------------------------
 # Config & Professional UI Setup
@@ -90,8 +97,8 @@ with st.sidebar:
     
     page = option_menu(
         menu_title=None,
-        options=["System Overview", "Data Smoothing", "Correlation Matrix", "Lag-Time Analysis", "Geospatial Impact", "Physics Primer", "Data Sources", "Project Details"],
-        icons=["activity", "bar-chart-line", "diagram-3", "clock-history", "globe-americas", "lightning", "server", "info-square"],
+        options=["System Overview", "Data Smoothing", "Correlation Matrix", "Lag-Time Analysis", "Extreme Events", "Periodicity Analysis", "Phase-Locked Climatology", "Hysteresis Analysis", "Monthly Statistics", "Geospatial Impact", "Physics Primer", "Data Sources", "Project Details"],
+        icons=["activity", "bar-chart-line", "diagram-3", "clock-history", "alert-triangle", "wave", "circle-half", "arrows-expand", "calendar", "globe-americas", "lightning", "server", "info-square"],
         menu_icon="cast",
         default_index=0,
         styles={
@@ -576,6 +583,287 @@ def page_physics_primer():
             "A normal quiet day is ~0 nT, a moderate storm is ≤-50 nT, and a severe superstorm (such as the Halloween 2003 storms or Carrington Event) involves Dst crashing below -300 nT."
         )
 
+
+
+# ---------------------------------------------------------------------------
+# PAGE 5.5: Extreme Events Analysis
+# ---------------------------------------------------------------------------
+
+def page_extreme_events():
+    st.title("Extreme Events Detection & Analysis")
+    st.markdown("Identify and analyze outlier days with abnormal geomagnetic and solar activity.")
+    
+    with st.expander("📖 Interpreting Extreme Events", expanded=False):
+        st.info(
+            "**What constitutes an extreme event?**\n"
+            "Using statistical z-scores (standard deviations from the mean), we identify days with unusual activity levels. "
+            "Events beyond 2.5σ are considered extreme. This helps discover:\n"
+            "- **Geomagnetic Storms:** Dst plummeting to record lows\n"
+            "- **Solar Eruptions:** Massive X-ray flares or unusually high sunspot activity\n"
+            "- **Solar System Disruptions:** Extreme F10.7 radio flux spikes"
+        )
+    
+    col_e1, col_e2 = st.columns([1, 2])
+    
+    with col_e1:
+        st.subheader("Threshold Configuration")
+        threshold_sigma = st.slider("Z-Score Threshold (σ)", 1.5, 4.0, 2.5, 0.1)
+        event_var = st.selectbox("Variable", ["dst_daily_min", "kp_daily_max", "ssn", "f107", "flare_xray_total"])
+    
+    with col_e2:
+        if event_var in df_filtered.columns:
+            extreme_df = find_extreme_events(df_filtered, event_var, threshold_sigma)
+            
+            if len(extreme_df) > 0:
+                fig_ext = go.Figure()
+                fig_ext.add_trace(go.Scattergl(
+                    x=df_filtered.index, y=df_filtered[event_var],
+                    mode='lines', line=dict(color='#e5e7eb', width=1),
+                    name="Normal Days", opacity=0.5
+                ))
+                fig_ext.add_trace(go.Scattergl(
+                    x=extreme_df.index, y=extreme_df[event_var],
+                    mode='markers', marker=dict(size=8, color=extreme_df["z_score"], 
+                    colorscale="Reds", showscale=True, colorbar=dict(title="Z-Score")),
+                    name="Extreme Events"
+                ))
+                fig_ext.update_layout(height=400, margin=dict(l=0, r=0, t=30, b=0), hovermode="x unified")
+                st.plotly_chart(fig_ext, width='stretch')
+                
+                st.subheader("Top Extreme Events")
+                st.dataframe(extreme_df[[event_var, "z_score"]].head(10), height=250)
+            else:
+                st.warning("No extreme events found with current threshold.")
+        else:
+            st.error(f"Column {event_var} not found in data.")
+
+
+# ---------------------------------------------------------------------------
+# PAGE 6: Periodicity & Cycle Analysis
+# ---------------------------------------------------------------------------
+
+def page_periodicity():
+    st.title("Periodicity & Solar Cycle Analysis")
+    st.markdown("Discover dominant cycles and periodic patterns in solar/geomagnetic activity.")
+    
+    with st.expander("📖 Understanding Spectral Analysis", expanded=False):
+        st.info(
+            "**FFT (Fast Fourier Transform):** Global frequency analysis to identify dominant cycles across the entire dataset.\n"
+            "**Wavelet (CWT):** Time-localized spectral power showing how cycles evolve through time.\n"
+            "The 11-year solar cycle should dominate. Secondary peaks may reveal the 27-day solar rotation (~monthly signature) or other harmonic patterns."
+        )
+    
+    col_p1, col_p2 = st.columns([1, 2])
+    
+    with col_p1:
+        st.subheader("Analysis Configuration")
+        period_var = st.selectbox("Variable", ["ssn", "f107", "kp_daily_max", "dst_daily_min"], index=0)
+        period_method = st.radio("Method", ["FFT (Global)", "Wavelet (Temporal)"])
+    
+    with col_p2:
+        if period_var in df_filtered.columns:
+            try:
+                periodicity_results = analyze_periodicity(df_filtered[period_var].dropna(), 
+                                                         method='fft' if 'FFT' in period_method else 'wv')
+                
+                if 'FFT' in period_method:
+                    st.subheader("Dominant Periods (FFT)")
+                    top_periods = periodicity_results.nlargest(10, "amplitude")
+                    fig_fft = px.bar(top_periods.head(10), x="period_years", y="amplitude",
+                                    labels={"period_years": "Period (Years)", "amplitude": "Amplitude"},
+                                    title=f"Top 10 Periods in {period_var}")
+                    fig_fft.update_layout(height=400, showlegend=False)
+                    st.plotly_chart(fig_fft, width='stretch')
+                    
+                    st.dataframe(top_periods[["period_years", "amplitude"]].head(10), hide_index=True, height=250)
+                else:
+                    st.subheader("Temporal Periodicity (Wavelet)")
+                    st.line_chart(periodicity_results["dominant_period_yrs"], height=400)
+                    
+            except Exception as e:
+                st.error(f"Periodicity analysis failed: {e}")
+        else:
+            st.error(f"Column {period_var} not found.")
+
+
+# ---------------------------------------------------------------------------
+# PAGE 7: Phase-Locked Climatology
+# ---------------------------------------------------------------------------
+
+def page_phase_climatology():
+    st.title("Phase-Locked Climatology: Solar Cycle Risk Zones")
+    st.markdown("Identify 'danger zones' within the 11-year solar cycle where geomagnetic storms are most likely.")
+    
+    with st.expander("📖 Understanding Phase-Locked Analysis", expanded=False):
+        st.info(
+            "**What is phase-locking?**\n"
+            "By dividing the 11-year solar cycle into 20 phase bins (5% intervals), we bin all Kp observations by their cycle phase and compute statistics. "
+            "This reveals if certain phases of the cycle are inherently 'stormier' than others, independent of absolute solar activity magnitude."
+        )
+    
+    col_pl1, col_pl2 = st.columns([1, 2])
+    
+    with col_pl1:
+        st.subheader("Configuration")
+        n_bins = st.slider("Phase Bins", 10, 40, 20, 2)
+        kp_col_sel = st.selectbox("Kp Column", [c for c in df_filtered.columns if 'kp' in c.lower()], index=0)
+        storm_threshold_pl = st.number_input("Storm Threshold (Kp)", 0.0, 9.0, 6.0, 0.5)
+    
+    with col_pl2:
+        if kp_col_sel in df_filtered.columns:
+            try:
+                climatology = analyze_phase_locked_climatology(
+                    df_filtered, kp_col=kp_col_sel, storm_threshold=storm_threshold_pl, bins=n_bins
+                )
+                
+                fig_clim = go.Figure()
+                fig_clim.add_trace(go.Scattergl(
+                    x=climatology.index.astype(float), y=climatology["kp_mean"],
+                    mode='lines+markers', line=dict(color='#2563eb', width=2),
+                    marker=dict(size=6), name="Mean Kp", fill='tozeroy', fillcolor='rgba(37, 99, 235, 0.2)'
+                ))
+                fig_clim.add_trace(go.Scattergl(
+                    x=climatology.index.astype(float), y=climatology["storm_prob_pct"],
+                    mode='lines+markers', line=dict(color='#b91c1c', width=2),
+                    marker=dict(size=6), name="Storm Prob (%)", yaxis='y2'
+                ))
+                fig_clim.update_layout(
+                    height=400, margin=dict(l=0, r=0, t=30, b=0),
+                    xaxis=dict(title="Solar Cycle Phase (0=min, 1=max)"),
+                    yaxis=dict(title="Mean Kp"),
+                    yaxis2=dict(title="Storm Probability (%)", overlaying='y', side='right'),
+                    hovermode="x unified"
+                )
+                st.plotly_chart(fig_clim, width='stretch')
+                
+                st.subheader("Climatology Statistics Table")
+                st.dataframe(climatology.astype(float).round(3), height=400)
+            except Exception as e:
+                st.error(f"Phase climatology analysis failed: {e}")
+        else:
+            st.error(f"Column {kp_col_sel} not found.")
+
+
+# ---------------------------------------------------------------------------
+# PAGE 8: Hysteresis Analysis
+# ---------------------------------------------------------------------------
+
+def page_hysteresis():
+    st.title("Hysteresis Analysis: Solar Cycle Phase Effects")
+    st.markdown("Compare geomagnetic response (Kp) to sunspot activity across rising vs. falling cycle phases.")
+    
+    with st.expander("📖 Understanding Hysteresis", expanded=False):
+        st.info(
+            "**What is hysteresis?**\n"
+            "Hysteresis occurs when a system's output depends not just on current input, but also on its history. "
+            "In solar physics, this reveals whether the magnetosphere responds differently to the same sunspot number depending on whether the cycle is rising (building) or falling (declining). "
+            "If points scatter differently by color, it proves the system has 'memory' of where we are in the 11-year cycle."
+        )
+    
+    col_h1, col_h2 = st.columns([1, 2])
+    
+    with col_h1:
+        st.subheader("Configuration")
+        sn_col_h = st.selectbox("Sunspot Proxy", [c for c in df_filtered.columns if 'ssn' in c.lower() or 'sn' in c.lower()], index=0)
+        kp_col_h = st.selectbox("Geomagnetic Index", [c for c in df_filtered.columns if 'kp' in c.lower()], index=0)
+    
+    with col_h2:
+        if sn_col_h in df_filtered.columns and kp_col_h in df_filtered.columns:
+            try:
+                hysteresis_df = analyze_hysteresis(
+                    df_filtered, sn_col=sn_col_h, kp_col=kp_col_h, save_path="hysteresis_plot_tmp.png"
+                )
+                
+                rising = hysteresis_df[hysteresis_df['phase_type'] == 'Rising']
+                falling = hysteresis_df[hysteresis_df['phase_type'] == 'Falling']
+                
+                fig_hyst = go.Figure()
+                fig_hyst.add_trace(go.Scattergl(
+                    x=rising[sn_col_h], y=rising[kp_col_h],
+                    mode='markers', marker=dict(size=5, color='#2563eb', opacity=0.4),
+                    name='Rising Phase'
+                ))
+                fig_hyst.add_trace(go.Scattergl(
+                    x=falling[sn_col_h], y=falling[kp_col_h],
+                    mode='markers', marker=dict(size=5, color='#dc2626', opacity=0.4),
+                    name='Falling Phase'
+                ))
+                fig_hyst.update_layout(
+                    height=500, margin=dict(l=0, r=0, t=30, b=0),
+                    xaxis=dict(title=sn_col_h),
+                    yaxis=dict(title=kp_col_h),
+                    hovermode="x unified"
+                )
+                st.plotly_chart(fig_hyst, width='stretch')
+                
+                st.info(f"**Rising Phase:** {len(rising)} days | **Falling Phase:** {len(falling)} days")
+            except Exception as e:
+                st.error(f"Hysteresis analysis failed: {e}")
+        else:
+            st.error("Required columns not found.")
+
+
+# ---------------------------------------------------------------------------
+# PAGE 9: Monthly Statistics & Aggregation
+# ---------------------------------------------------------------------------
+
+def page_monthly_stats():
+    st.title("Monthly Statistics & Temporal Aggregation")
+    st.markdown("Roll up daily observations into monthly summaries to identify medium-term patterns.")
+    
+    with st.expander("📖 Understanding Aggregated Statistics", expanded=False):
+        st.info(
+            "**Why aggregate to monthly?**\n"
+            "Daily data is noisy and influenced by local oscillations. Monthly aggregation reveals true trends by:\n"
+            "- Computing **mean** values (smooth trends)\n"
+            "- Tracking **max** values (peak events)\n"
+            "- Summing **storm hours** (cumulative impact)"
+        )
+    
+    col_m1, col_m2 = st.columns([1, 2])
+    
+    with col_m1:
+        st.subheader("Aggregation Settings")
+        agg_period = st.radio("Period", ["Monthly", "Quarterly", "Yearly"], horizontal=False)
+        period_map = {"Monthly": "M", "Quarterly": "Q", "Yearly": "Y"}
+        period_code = period_map[agg_period]
+    
+    with col_m2:
+        try:
+            if "sn" in df_filtered.columns:
+                monthly_stats = compute_monthly_stats(df_filtered.copy())
+                
+                fig_month = go.Figure()
+                if "sn_mean" in monthly_stats.columns:
+                    fig_month.add_trace(go.Scattergl(
+                        x=monthly_stats.index, y=monthly_stats["sn_mean"],
+                        mode='lines', line=dict(color='#d97706', width=2),
+                        name="SSN Mean"
+                    ))
+                if "Kp_mean" in monthly_stats.columns:
+                    fig_month.add_trace(go.Scattergl(
+                        x=monthly_stats.index, y=monthly_stats["Kp_mean"],
+                        mode='lines', line=dict(color='#2563eb', width=2),
+                        name="Kp Mean", yaxis='y2'
+                    ))
+                
+                fig_month.update_layout(
+                    height=400, margin=dict(l=0, r=0, t=30, b=0),
+                    xaxis=dict(title="Date"),
+                    yaxis=dict(title="SSN"),
+                    yaxis2=dict(title="Kp", overlaying='y', side='right'),
+                    hovermode="x unified"
+                )
+                st.plotly_chart(fig_month, width='stretch')
+                
+                st.subheader("Monthly Statistics Summary")
+                st.dataframe(monthly_stats.round(3).head(20), height=400)
+            else:
+                st.error("SSN column not found.")
+        except Exception as e:
+            st.error(f"Monthly statistics failed: {e}")
+
+
 # ---------------------------------------------------------------------------
 # Router Execution
 # ---------------------------------------------------------------------------
@@ -588,6 +876,16 @@ elif page == "Correlation Matrix":
     page_correlations()
 elif page == "Lag-Time Analysis":
     page_lag_analysis()
+elif page == "Extreme Events":
+    page_extreme_events()
+elif page == "Periodicity Analysis":
+    page_periodicity()
+elif page == "Phase-Locked Climatology":
+    page_phase_climatology()
+elif page == "Hysteresis Analysis":
+    page_hysteresis()
+elif page == "Monthly Statistics":
+    page_monthly_stats()
 elif page == "Geospatial Impact":
     page_geospatial_impact()
 elif page == "Physics Primer":
