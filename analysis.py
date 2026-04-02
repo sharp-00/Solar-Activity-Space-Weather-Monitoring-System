@@ -122,7 +122,7 @@ def compute_periodly_stats(df: pd.DataFrame, period: str) -> pd.DataFrame:
     """
     Resamples daily data into W, 2W, M, or Y periods with peak tracking.
     """
-    valid_periods = ['W', '2W', 'M', 'Y']
+    valid_periods = ['W', '2W', 'M', 'Q', 'Y']
     if period.upper().replace('E', '') not in valid_periods:
         raise ValueError(f"Period must be in {valid_periods}")
 

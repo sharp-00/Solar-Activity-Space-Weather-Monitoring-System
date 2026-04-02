@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from analysis import (
     cross_correlation, find_extreme_events, solar_cycle_phase,
     compute_monthly_stats, analyze_periodicity, predictive_dominance,
-    analyze_phase_locked_climatology, analyze_hysteresis
+    analyze_phase_locked_climatology, analyze_hysteresis, compute_periodly_stats
 )
 
 # ---------------------------------------------------------------------------
@@ -392,68 +392,115 @@ def page_lag_analysis():
         "**What is this mathematical model showing?**\n"
         "Superposed Epoch Analysis is a mathematical technique used to align multiple independent events (like 100 different solar flares) at a common '**Day 0**' to find their average delayed impact.\n\n"
         "- **The Transit Delay:** X-Ray flares hit Earth at the speed of light (8 minutes), but the physical plasma clouds (CMEs) that cause geomagnetic storms travel much slower. \n"
-        "- Look at the graph: you will see that the Geomagnetic disturbance (the thick black line for Kp or Dst) doesn't completely peak/crash until roughly 2 to 4 days *after* Day 0. This visual delay statistically proves the speed of the physical solar wind."
+        "- **Lag Relation:** This tab allows you to visualize and calculate the Pearson correlation (r) at various daily offsets, proving the physical transit speed of the solar wind."
     )
     
+    # --- New Section: Bivariate Lag Correlation ---
+    st.subheader("Bivariate Lag-Correlation (Pearson r vs Lag)")
+    column_lag_rel_config, column_lag_rel_viz = st.columns([1, 2])
+    
+    with column_lag_rel_config:
+        numeric_cols = [c for c in dataframe_filtered.columns if dataframe_filtered[c].dtype in [np.float64, np.int64]]
+        driver_x = st.selectbox("Driver (X)", numeric_cols, index=numeric_cols.index("ssn") if "ssn" in numeric_cols else 0)
+        response_y = st.selectbox("Response (Y)", numeric_cols, index=numeric_cols.index("kp_daily_max") if "kp_daily_max" in numeric_cols else 0)
+        correlation_max_lag = st.slider("Max Lag (Days)", 0, 60, 28)
+        
+    with column_lag_rel_viz:
+        if driver_x and response_y:
+            corr_df = cross_correlation(dataframe_filtered[driver_x], dataframe_filtered[response_y], max_lag=correlation_max_lag)
+            
+            fig_corr = px.line(corr_df, x="lag_days", y="pearson_r", markers=True,
+                               title=f"Correlation Impact: {driver_x} → {response_y}",
+                               labels={"lag_days": "Lag (Days)", "pearson_r": "Pearson Correlation (r)"})
+            fig_corr.add_vline(x=0, line_dash="dash", line_color="gray", opacity=0.5)
+            # Highlight the optimal lag
+            opt_row = corr_df.loc[corr_df["pearson_r"].idxmax()]
+            fig_corr.add_annotation(x=opt_row["lag_days"], y=opt_row["pearson_r"],
+                                  text=f"Peak: {opt_row['lag_days']}d (r={opt_row['pearson_r']:.2f})",
+                                  showarrow=True, arrowhead=1)
+            
+            fig_corr.update_layout(height=400, margin=dict(l=0, r=0, t=40, b=0), hovermode="x unified")
+            st.plotly_chart(fig_corr, width="stretch")
+
+    st.markdown("---")
+
     column_lag_analysis_config, column_lag_analysis_viz = st.columns(2)
     with column_lag_analysis_config:
         st.subheader("Iterative Delay Optimization")
         lag_analysis_dataframe = load_stats_file("lag_time_detailed.csv")
         if not lag_analysis_dataframe.empty:
             daily_lag_records = lag_analysis_dataframe[lag_analysis_dataframe["resolution"] == "Daily"]
-            st.dataframe(daily_lag_records[["driver_label", "response_label", "optimal_lag", "correlation_at_peak"]], hide_index=True, height=300)
+            st.dataframe(daily_lag_records[["driver_label", "response_label", "optimal_lag", "correlation_at_peak"]], hide_index=True, height=250)
+        else:
+            st.info("Pre-calculated statistics not found in `data/analysis/stats/`. Run the analysis pipeline to populate this table.")
         
         st.subheader("Dynamic Superposed Epoch Analysis")
-        trigger_metric_name = st.selectbox("Trigger Variable", ["flare_X", "flare_M", "ssn", "f107", "kp_daily_max", "dst_daily_mean"], index=2 if "ssn" in dataframe.columns else 0)
-        trigger_operator = st.selectbox("Operator", ["=", "<=", "=="])
+        trigger_metric_name = st.selectbox("Trigger Variable", ["flare_X", "flare_M", "ssn", "f107", "kp_daily_max"], index=2 if "ssn" in dataframe.columns else 0)
+        trigger_operator = st.selectbox("Operator", [">=", "<=", "==", ">", "<"])
         trigger_threshold_value = st.number_input("Threshold", value=1.0 if "flare" in trigger_metric_name else 100.0)
+        sea_response_variable = st.selectbox("Response Variable", numeric_cols, index=numeric_cols.index("dst_daily_mean") if "dst_daily_mean" in numeric_cols else 0)
         
         if trigger_metric_name in dataframe.columns:
+            # Fixed operator logic
             if trigger_operator == ">=": trigger_indices = dataframe[dataframe[trigger_metric_name] >= trigger_threshold_value].index
             elif trigger_operator == "<=": trigger_indices = dataframe[dataframe[trigger_metric_name] <= trigger_threshold_value].index
+            elif trigger_operator == ">": trigger_indices = dataframe[dataframe[trigger_metric_name] > trigger_threshold_value].index
+            elif trigger_operator == "<": trigger_indices = dataframe[dataframe[trigger_metric_name] < trigger_threshold_value].index
             else: trigger_indices = dataframe[dataframe[trigger_metric_name] == trigger_threshold_value].index
             
             st.markdown(f"**Trigger Events Found:** {len(trigger_indices)}")
             
-            if len(trigger_indices) > 0 and "dst_daily_mean" in dataframe.columns:
+            if len(trigger_indices) > 0 and sea_response_variable in dataframe.columns:
                 epoch_window = 10
                 epoch_array = []
                 for trigger_time in trigger_indices:
-                    position_index = dataframe.index.get_loc(trigger_time)
-                    if position_index >= epoch_window and position_index < len(dataframe) - epoch_window:
-                        epoch_array.append(dataframe["dst_daily_mean"].iloc[position_index-epoch_window:position_index+epoch_window+1].values)
+                    try:
+                        position_index = dataframe.index.get_loc(trigger_time)
+                        if position_index >= epoch_window and position_index < len(dataframe) - epoch_window:
+                            epoch_array.append(dataframe[sea_response_variable].iloc[position_index-epoch_window:position_index+epoch_window+1].values)
+                    except Exception:
+                        continue
                 
                 if epoch_array:
                     epoch_mean_values = np.nanmean(epoch_array, axis=0)
                     epoch_day_range = np.arange(-epoch_window, epoch_window+1)
-                    figure_superposed_epoch = px.line(x=epoch_day_range, y=epoch_mean_values, labels={"x": "Days from Trigger (Epoch 0)", "y": "Mean Dst (nT)"}, title=f"Geomagnetic Response (Dst) to {trigger_metric_name} {trigger_operator} {trigger_threshold_value}")
-                    figure_superposed_epoch.add_vline(x=0, line_dash="dash", line_color="#f59e0b", annotation_text="Trigger Event")
-                    figure_superposed_epoch.update_layout(height=300, margin=dict(l=0, r=0, t=40, b=0),
-                                        xaxis=dict(title="Days from Trigger Event"), yaxis=dict(title="Mean Dst (nT)"),
+                    figure_superposed_epoch = px.line(x=epoch_day_range, y=epoch_mean_values, 
+                                                     labels={"x": "Days from Trigger (Day 0)", "y": f"Mean {sea_response_variable}"}, 
+                                                     title=f"Response Analysis: {sea_response_variable} aligned to {trigger_metric_name} {trigger_operator} {trigger_threshold_value}")
+                    figure_superposed_epoch.add_vline(x=0, line_dash="dash", line_color="#f59e0b", annotation_text="Event Start")
+                    figure_superposed_epoch.update_layout(height=350, margin=dict(l=0, r=0, t=40, b=0),
+                                        xaxis=dict(title="Days from Day 0 (Trigger)"), yaxis=dict(title=f"Mean {sea_response_variable}"),
                                         legend=dict(x=0.01, y=0.99, bgcolor="rgba(0,0,0,0.5)", bordercolor="white", borderwidth=1))
                     st.plotly_chart(figure_superposed_epoch, width="stretch")
                 else:
-                    st.warning("Trigger events are too close to dataset edges to plot window.")
+                    st.warning("Trigger events are too sparse or close to edges to generate a mean epoch.")
         else:
-            st.warning(f"Metric {trigger_metric_name} not found in dataset.")
+            st.warning(f"Metric {trigger_metric_name} not found in historical record.")
 
     with column_lag_analysis_viz:
         st.subheader("Event Transit Tracking: Flare to Storm")
         flare_storm_events = load_stats_file("flare_storm_lag_events.csv")
         if not flare_storm_events.empty and "dst_lag_days" in flare_storm_events.columns:
             triggered_storms = flare_storm_events[flare_storm_events.get("storm_triggered", False)]
-            figure_transit_delay_histogram = px.histogram(triggered_storms, x="dst_lag_days", nbins=8, title=f"Transit Delay (n={len(triggered_storms)} storms)", labels={"dst_lag_days": "Lag (days)"}, color_discrete_sequence=["#22c55e"])
-            mean_transit_lag = triggered_storms["dst_lag_days"].mean()
-            figure_transit_delay_histogram.add_vline(x=mean_transit_lag, line_dash="dash", line_color="#ef4444", annotation_text=f"Mean: {mean_transit_lag:.1f}d")
-            figure_transit_delay_histogram.update_layout(height=300, margin=dict(l=0, r=0, t=40, b=0),
-                                 xaxis=dict(title="Transit Lag (days)"), yaxis=dict(title="Frequency (Count)"),
-                                 legend=dict(x=0.01, y=0.99, bgcolor="rgba(0,0,0,0.5)", bordercolor="white", borderwidth=1))
-            st.plotly_chart(figure_transit_delay_histogram, width="stretch")
+            if not triggered_storms.empty:
+                figure_transit_delay_histogram = px.histogram(triggered_storms, x="dst_lag_days", nbins=8, 
+                                                             title=f"Transit Delay (n={len(triggered_storms)} storms)", 
+                                                             labels={"dst_lag_days": "Lag (days)"}, color_discrete_sequence=["#22c55e"])
+                mean_transit_lag = triggered_storms["dst_lag_days"].mean()
+                figure_transit_delay_histogram.add_vline(x=mean_transit_lag, line_dash="dash", line_color="#ef4444", annotation_text=f"Mean: {mean_transit_lag:.1f}d")
+                figure_transit_delay_histogram.update_layout(height=350, margin=dict(l=0, r=0, t=40, b=0),
+                                     xaxis=dict(title="Transit Lag (days)"), yaxis=dict(title="Frequency (Count)"),
+                                     legend=dict(x=0.01, y=0.99, bgcolor="rgba(0,0,0,0.5)", bordercolor="white", borderwidth=1))
+                st.plotly_chart(figure_transit_delay_histogram, width="stretch")
+            else:
+                st.warning("No triggered storms identified in the current window.")
 
             extreme_storms_dataframe = load_stats_file("extreme_storms_dst.csv")
-            if not extreme_storms_dataframe.empty and set(["date", "dst_daily_min", "kp_daily_max", "f107"]).issubset(extreme_storms_dataframe.columns):
+            if not extreme_storms_dataframe.empty and set(["date", "dst_daily_min", "kp_daily_max"]).issubset(extreme_storms_dataframe.columns):
                 st.subheader("Worst Global Disruptions (Dst ≤ -100)")
-                st.dataframe(extreme_storms_dataframe[["date", "dst_daily_min", "kp_daily_max", "f107"]].head(10), hide_index=True, height=250)
+                st.dataframe(extreme_storms_dataframe[["date", "dst_daily_min", "kp_daily_max"]].head(10), hide_index=True, height=250)
+        else:
+            st.info("Additional storm-event data is missing from current cleaned records.")
 
 
 # Helper function for aurora visibility locations
@@ -851,7 +898,7 @@ def page_extreme_events():
     with column_extreme_event_config:
         st.subheader("Threshold Configuration")
         zscore_threshold_sigma = st.slider("Z-Score Threshold (σ)", 1.5, 4.0, 2.5, 0.1)
-        extreme_event_variable = st.selectbox("Variable", ["dst_daily_min", "kp_daily_max", "ssn", "f107", "flare_xray_total"])
+        extreme_event_variable = st.selectbox("Variable", ["kp_daily_max", "ssn", "f107", "flare_xray_total"])
     
     with column_extreme_event_viz:
         if extreme_event_variable in dataframe_filtered.columns:
@@ -1043,12 +1090,7 @@ def page_hysteresis():
                 
                 st.info(f"**Rising Phase:** {len(rising_phase_data)} days | **Falling Phase:** {len(falling_phase_data)} days")
                 
-                # Display saved hysteresis image if available
-                import os
-                if os.path.exists("Images_dashboard/hysteresis_phase.png"):
-                    st.markdown("---")
-                    st.subheader("Phase Analysis Visualization")
-                    st.image("Images_dashboard/hysteresis_phase.png", caption="Solar Hysteresis: Rising vs Falling Phase Comparison", width="stretch")
+
             except Exception as hysteresis_error:
                 st.error(f"Hysteresis analysis failed: {hysteresis_error}")
         else:
@@ -1060,17 +1102,6 @@ def page_hysteresis():
 # ---------------------------------------------------------------------------
 
 def page_monthly_stats():
-    st.title("Monthly Statistics & Temporal Aggregation")
-    st.markdown("Roll up daily observations into monthly summaries to identify medium-term patterns.")
-    
-    st.info(
-        "**Why aggregate to monthly?**\n"
-        "Daily data is noisy and influenced by local oscillations. Monthly aggregation reveals true trends by:\n"
-        "- Computing **mean** values (smooth trends)\n"
-        "- Tracking **max** values (peak events)\n"
-        "- Summing **storm hours** (cumulative impact)"
-    )
-    
     column_monthly_config, column_monthly_viz = st.columns([1, 2])
     
     with column_monthly_config:
@@ -1078,27 +1109,39 @@ def page_monthly_stats():
         aggregation_period_selection = st.radio("Period", ["Monthly", "Quarterly", "Yearly"], horizontal=False)
         period_selection_map = {"Monthly": "M", "Quarterly": "Q", "Yearly": "Y"}
         period_aggregation_code = period_selection_map[aggregation_period_selection]
+
+    st.title(f"{aggregation_period_selection} Statistics & Temporal Aggregation")
+    st.markdown(f"Roll up daily observations into {aggregation_period_selection.lower()} summaries to identify medium-term patterns.")
+    
+    st.info(
+        f"**Why aggregate to {aggregation_period_selection.lower()}?**\n"
+        "Daily data is noisy and influenced by local oscillations. Period aggregation reveals true trends by:\n"
+        "- Computing **mean** values (smooth trends)\n"
+        "- Tracking **max** values (peak events)\n"
+        "- Summing **storm hours** (cumulative impact)"
+    )
     
     with column_monthly_viz:
         try:
             if "ssn" in dataframe_filtered.columns:
-                monthly_aggregated_statistics = compute_monthly_stats(dataframe_filtered.copy())
+                # Use the dynamic period code instead of hardcoded monthly stats
+                periodic_aggregated_statistics = compute_periodly_stats(dataframe_filtered.copy(), period_aggregation_code)
                 
-                figure_monthly_statistics_chart = go.Figure()
-                if "ssn_mean" in monthly_aggregated_statistics.columns:
-                    figure_monthly_statistics_chart.add_trace(go.Scattergl(
-                        x=monthly_aggregated_statistics.index, y=monthly_aggregated_statistics["ssn_mean"],
+                figure_periodic_statistics_chart = go.Figure()
+                if "ssn_mean" in periodic_aggregated_statistics.columns:
+                    figure_periodic_statistics_chart.add_trace(go.Scattergl(
+                        x=periodic_aggregated_statistics.index, y=periodic_aggregated_statistics["ssn_mean"],
                         mode='lines', line=dict(color='#f59e0b', width=2),
                         name="SSN Mean"
                     ))
-                if "kp_daily_mean" in monthly_aggregated_statistics.columns:
-                    figure_monthly_statistics_chart.add_trace(go.Scattergl(
-                        x=monthly_aggregated_statistics.index, y=monthly_aggregated_statistics["kp_daily_mean"],
+                if "kp_daily_mean" in periodic_aggregated_statistics.columns:
+                    figure_periodic_statistics_chart.add_trace(go.Scattergl(
+                        x=periodic_aggregated_statistics.index, y=periodic_aggregated_statistics["kp_daily_mean"],
                         mode='lines', line=dict(color='#22c55e', width=2),
                         name="Kp Mean", yaxis='y2'
                     ))
                 
-                figure_monthly_statistics_chart.update_layout(
+                figure_periodic_statistics_chart.update_layout(
                     height=400, margin=dict(l=0, r=0, t=30, b=0),
                     xaxis=dict(title="Date"),
                     yaxis=dict(title="SSN (Sunspot Number)"),
@@ -1106,10 +1149,10 @@ def page_monthly_stats():
                     hovermode="x unified",
                     legend=dict(x=0.01, y=0.99, bgcolor="rgba(0,0,0,0.5)", bordercolor="white", borderwidth=1)
                 )
-                st.plotly_chart(figure_monthly_statistics_chart, width="stretch")
+                st.plotly_chart(figure_periodic_statistics_chart, width="stretch")
                 
-                st.subheader("Monthly Statistics Summary")
-                st.dataframe(monthly_aggregated_statistics.round(3).head(20), height=400)
+                st.subheader(f"{aggregation_period_selection} Statistics Summary")
+                st.dataframe(periodic_aggregated_statistics.round(3).head(20), height=400)
             else:
                 st.error("SSN column ('ssn') not found in dataset.")
         except Exception as monthly_stats_error:
