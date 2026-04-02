@@ -1,119 +1,80 @@
-# Solar Activity & Space Weather Monitoring System
+# ☀️ Solar Activity & Space Weather Monitoring System
 
-A reproducible monitoring and analytics dashboard for solar activity and space weather indicators, built with Python and Plotly Dash.
+An advanced, interactive analytics dashboard for monitoring solar activity and its geospatial impacts on Earth. Built with **Python 3.x** and **Streamlit**, this project bridges the gap between raw astrophysical telemetry and actionable data science.
 
-## Project Structure
+## Quick Start
 
-```
-solar_monitor/
-├── download_data.py     # Fetch and parse all raw data to data/
-├── ingest.py            # Load from local data/ into DataFrames
-├── pipeline.py          # Cleaning, resampling, harmonisation, smoothing
-├── analysis.py          # Correlation, anomaly detection, cycle phase
-├── app.py               # Plotly Dash dashboard (main entry point)
-├── requirements.txt
-└── data/                # Populated by download_data.py
-    ├── silso_sunspots_daily.csv       # raw SILSO daily (downloaded once)
-    ├── silso_sunspots_monthly.csv     # raw SILSO monthly (downloaded once)
-    ├── kp_historic_gfz.txt            # raw GFZ Kp 1932-present (downloaded once)
-    ├── noaa_kp_index.json             # raw NOAA recent feed (refreshed each run)
-    ├── sunspots_daily_clean.csv       # parsed + cleaned daily SN
-    ├── sunspots_monthly_clean.csv     # parsed + cleaned monthly SN
-    └── kp_merged_clean.csv            # GFZ historic + NOAA recent, merged
+### 1. Install Dependencies
+```bash
+pip install -r requirements.txt
 ```
 
-
-### First-time data download
-
+### 2. Fetch Data
+First-time data ingestion (fetches SILSO, OMNIWeb, and NOAA feeds):
 ```bash
 python3 download_data.py
 ```
 
-This fetches:
-- **SILSO daily sunspot numbers** (Royal Observatory of Belgium) — 1818 to present
-- **SILSO monthly sunspot numbers** — same source, monthly resolution, back to 1749
-- **GFZ Kp archive** (German Research Centre for Geosciences) — 3-hourly Kp index, 1932 to present
-- **NOAA real-time Kp** (NOAA SWPC) — last ~7 days, merged on top of GFZ
-
-Large historical files are downloaded **once** and never re-fetched unless you delete them.
-
-### Daily refresh (fast)
-
+### 3. Launch Dashboard
 ```bash
-python3 download_data.py --refresh
+streamlit run dashboard.py
 ```
-
-Only re-fetches the last ~30 days of sunspot data and the latest NOAA Kp feed.
-The large historical files are untouched. Run this whenever you want up-to-date data.
-
-### Launch the dashboard
-
-```bash
-python3 app.py
-```
-
-Open your browser at [http://localhost:8050](http://localhost:8050).
 
 ---
 
-## Dashboard Overview
+## Project Architecture
 
-The dashboard has four tabs, all filtered by a shared date range picker:
+```bash
+Solar-Activity-Monitoring/
+├── dashboard.py         # Main entry point (Streamlit UI)
+├── analysis.py          # Core statistical engine (Cross-correlation, FFT, Wavelets)
+├── ingest.py            # Data loading and ingestion utilities
+├── download_data.py     # Data fetching and update pipeline
+├── clean.py             # Data cleaning and harmonization
+├── Images_dashboard/     # Visual resources for the primer and simulator
+└── data/                # Data storage (Cleaned and Analyzed stats)
+    ├── clean/           # Harmonized daily solar-weather datasets
+    └── analysis/stats/   # Pre-calculated statistical results (Lags, Epochs, etc.)
+```
 
-| Tab | Content |
-|-----|---------|
-| **Time Series** | Dual-axis SN + Kp chart, storm markers, Kp=5 threshold line, monthly SN heatmap |
-| **Correlation** | Cross-correlation bar chart with peak lag detection, lagged scatter with LOWESS trendline |
-| **Extreme Events** | Sigma-threshold event tables for SN and Kp, annotated timeline, rolling z-score chart |
-| **Smoothing** | Overlay of raw / 27-day rolling / 365-day rolling / Savitzky-Golay; residuals bar chart; data limitations table |
+---
 
-Global controls:
-- **Date range picker** — filters all tabs simultaneously
-- **Sigma slider** (1.5–4.0 σ) — threshold for extreme event detection (Tab 3)
-- **Max lag slider** (5–60 days) — range for cross-correlation (Tab 2)
+## Dashboard Modules
+
+| Module | Purpose | Key Features |
+|:---|:---|:---|
+| **Solar Number Time Series** | Historical Analysis | 200 years of SILSO data, rolling means, and monthly heatmaps. |
+| **System Overview** | Cause & Effect | Direct contrast of solar drivers (SSN, F10.7) vs terrestrial response (Kp, Dst). |
+| **Physics Primer** | Education | Detailed science behind flares, CMEs, and the 11-year solar cycle. |
+| **Storm Simulator** | Interactive Tool | NOAA G-Scale simulator mapping Kp indices to global infrastructure impacts. |
+| **Geospatial Impact** | Aurora Mapping | Interactive 3D globe showing the expansion of the auroral oval during storms. |
+| **Lag-Time Analysis** | Causality Analysis | Superposed Epoch Analysis (SEA) to visualize the ~2-4 day delay of CME transit. |
+| **Periodicity Analysis** | Frequency Domain | FFT and Wavelet transforms to detect the 11-year and 27-day solar cycles. |
+| **Hysteresis & Climatology** | Cycle Dynamics | Analysis of the rising vs. falling phase effects on geomagnetic sensitivity. |
+
+---
+
+## Science Behind the Data
+
+-   **Temporal Alignment**: Uses Daily resolution to capture the 1-4 day lag between solar eruptions and geomagnetic impacts (invisible at monthly resolution).
+-   **Noise Filtration**: Implements **Savitzky-Golay** polynomial filters to preserve the timing of extreme flare peaks that simple moving averages might flatten.
+-   **Statistical Detection**: Uses **Z-Score analysis** to automatically flag extreme space weather events beyond 2.5σ deviations.
 
 ---
 
 ## Data Sources
 
-| Dataset | Source | Coverage | Notes |
-|---------|--------|----------|-------|
-| Daily Sunspot Number | [SILSO WDC](https://www.sidc.be/silso/DATA/SN_d_tot_V2.0.csv) | 1818–present | International SN v2, downloaded once |
-| Monthly Sunspot Number | [SILSO WDC](https://www.sidc.be/silso/DATA/SN_m_tot_V2.0.csv) | 1749–present | Monthly mean SN, downloaded once |
-| Kp Index (historic) | [GFZ Potsdam](https://www-app3.gfz-potsdam.de/kp_index/Kp_ap_Ap_SN_F107_since_1932.txt) | 1932–present | 3-hourly, downloaded once |
-| Kp Index (recent) | [NOAA SWPC](https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json) | Last ~7 days | Re-fetched on every refresh |
-
-
-
-## Data Flow
-
-```
-download_data.py
-    |
-    |-- SILSO daily/monthly  →  sunspots_daily_clean.csv
-    |                            sunspots_monthly_clean.csv
-    |
-    |-- GFZ Kp (once)  ─┐
-    |-- NOAA Kp (live) ─┴─→  kp_merged_clean.csv
-    
-ingest.py           fetch_sunspots() / fetch_kp_index()
-    ↓
-pipeline.py         clean → resample → align → smooth → z-score
-    ↓
-analysis.py         cross_correlation / find_extreme_events / monthly_stats
-    ↓
-app.py              Plotly Dash dashboard
-```
+-   **SILSO**: Sunspot Index and Long-term Solar Observations (Royal Observatory of Belgium).
+-   **NASA OMNIWeb**: Hourly and Daily OMNI parameters (Dst Index, Solar Wind properties).
+-   **NOAA SWPC**: Real-time X-ray flares and Kp telemetry.
+-   **GFZ Potsdam**: Definitive historical Kp index archive.
 
 ---
 
-## Key Design Decisions
+## The Team
+-   **Mulumudi Dinesh Karthik**
+-   **Vansh Gupta**
+-   **Abhishek Menon**
+-   **Shailendra Pratap Singh**
 
-**Why daily resolution instead of monthly?**
-The CME travel-time lag between a solar eruption and the resulting geomagnetic storm is 1–4 days. This structure is completely invisible at monthly resolution and only becomes visible in the cross-correlation at daily granularity.
-
-**Why GFZ for historic Kp?**
-The NOAA real-time API is not designed for bulk historical download — it only serves recent data. GFZ provides the definitive long-term archive maintained by the same scientific community that defined the Kp index, updated daily.
-
-**Why Savitzky-Golay for the cycle baseline?**
-A centred rolling mean creates a phase shift artefact near the edges of the data window. Savitzky-Golay (polynomial fitting in a sliding window) avoids this while preserving the shape of solar cycle peaks better than a simple moving average.
+Built with ❤️.
