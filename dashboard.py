@@ -830,19 +830,19 @@ def page_monthly_stats():
     
     with col_m2:
         try:
-            if "sn" in df_filtered.columns:
+            if "ssn" in df_filtered.columns:
                 monthly_stats = compute_monthly_stats(df_filtered.copy())
                 
                 fig_month = go.Figure()
-                if "sn_mean" in monthly_stats.columns:
+                if "ssn_mean" in monthly_stats.columns:
                     fig_month.add_trace(go.Scattergl(
-                        x=monthly_stats.index, y=monthly_stats["sn_mean"],
+                        x=monthly_stats.index, y=monthly_stats["ssn_mean"],
                         mode='lines', line=dict(color='#d97706', width=2),
                         name="SSN Mean"
                     ))
-                if "Kp_mean" in monthly_stats.columns:
+                if "kp_daily_mean" in monthly_stats.columns:
                     fig_month.add_trace(go.Scattergl(
-                        x=monthly_stats.index, y=monthly_stats["Kp_mean"],
+                        x=monthly_stats.index, y=monthly_stats["kp_daily_mean"],
                         mode='lines', line=dict(color='#2563eb', width=2),
                         name="Kp Mean", yaxis='y2'
                     ))
@@ -851,15 +851,15 @@ def page_monthly_stats():
                     height=400, margin=dict(l=0, r=0, t=30, b=0),
                     xaxis=dict(title="Date"),
                     yaxis=dict(title="SSN"),
-                    yaxis2=dict(title="Kp", overlaying='y', side='right'),
+                    yaxis2=dict(title="Kp Index", overlaying='y', side='right'),
                     hovermode="x unified"
                 )
-                st.plotly_chart(fig_month, width='stretch')
+                st.plotly_chart(fig_month, use_container_width=True)
                 
                 st.subheader("Monthly Statistics Summary")
                 st.dataframe(monthly_stats.round(3).head(20), height=400)
             else:
-                st.error("SSN column not found.")
+                st.error("SSN column ('ssn') not found in dataset.")
         except Exception as e:
             st.error(f"Monthly statistics failed: {e}")
 

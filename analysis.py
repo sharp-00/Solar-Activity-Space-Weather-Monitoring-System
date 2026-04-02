@@ -127,14 +127,12 @@ def compute_periodly_stats(df: pd.DataFrame, period: str) -> pd.DataFrame:
         raise ValueError(f"Period must be in {valid_periods}")
 
     agg = {}
-    if "sn" in df.columns:
-        agg.update({"sn_mean": ("sn", "mean"), "sn_max": ("sn", "max")})
-    if "Kp_mean" in df.columns:
-        agg["Kp_mean"] = ("Kp_mean", "mean")
-    if "Kp_max" in df.columns:
-        agg["Kp_max"] = ("Kp_max", "max")
-    if "Kp_storm_hours" in df.columns:
-        agg["storm_hours"] = ("Kp_storm_hours", "sum")
+    if "ssn" in df.columns:
+        agg.update({"ssn_mean": ("ssn", "mean"), "ssn_max": ("ssn", "max")})
+    if "kp_daily_mean" in df.columns:
+        agg["kp_daily_mean"] = ("kp_daily_mean", "mean")
+    if "kp_daily_max" in df.columns:
+        agg["kp_daily_max"] = ("kp_daily_max", "max")
 
     result = df.resample(period + "E").agg(**agg)
     result.index.name = "date"
