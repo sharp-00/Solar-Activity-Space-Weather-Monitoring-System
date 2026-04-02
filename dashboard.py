@@ -1,9 +1,29 @@
 """dashboard.py — Professional Interactive Dashboard for Space Weather Analytics
 ---------------------------------------------------------------------------
-Visualizes the output of the solar weather pipeline (data/clean/solar_weather_daily.csv)
-and the statistical results from data/analysis/stats/.
+Visualises the output of the solar-weather pipeline
+(``data/clean/solar_weather_daily.csv``) and pre-calculated statistical
+results from ``data/analysis/stats/``.
 
-Usage:
+Pages
+-----
+1.  Solar Number Time Series — 200+ years of SILSO sunspot data.
+2.  System Overview — cause/effect contrast of solar drivers vs response.
+3.  Physics Primer — educational module on solar physics.
+4.  Storm Simulator — NOAA G-Scale interactive explorer.
+5.  Geospatial Impact — 3-D auroral-boundary globe.
+6.  Monthly Statistics — configurable M/Q/Y aggregation.
+7.  Data Smoothing — SMA vs Savitzky-Golay comparison.
+8.  Correlation Matrix — Pearson/Spearman heatmaps.
+9.  Lag-Time Analysis — bivariate cross-correlation & SEA.
+10. Periodicity Analysis — FFT and CWT spectral charts.
+11. Phase-Locked Climatology — solar-cycle risk bins.
+12. Hysteresis Analysis — rising vs falling phase scatter.
+13. Extreme Events — Z-score outlier detection.
+14. Data Sources — provenance and attribution.
+15. Project Details — team and mission.
+
+Usage
+-----
     streamlit run dashboard.py
 """
 
@@ -72,6 +92,17 @@ st.markdown("""
 
 @st.cache_data(ttl=900)
 def load_data():
+    """Load the master daily solar-weather dataset.
+
+    If the cleaned CSV does not exist locally (e.g. first deploy on
+    Streamlit Cloud), triggers the full ingestion and cleaning pipeline
+    via subprocess before returning.
+
+    Returns
+    -------
+    pd.DataFrame
+        Daily-resolution DataFrame indexed by ``date``.
+    """
     csv_path = Path("data/clean/solar_weather_daily.csv")
     
     if not csv_path.exists():
@@ -105,6 +136,18 @@ def load_data():
 
 @st.cache_data(ttl=900)
 def load_stats_file(filename):
+    """Load a pre-calculated statistics CSV from the analysis output.
+
+    Parameters
+    ----------
+    filename : str
+        Basename of the file inside ``data/analysis/stats/``.
+
+    Returns
+    -------
+    pd.DataFrame
+        Contents of the file, or an empty DataFrame if not found.
+    """
     path = Path(f"data/analysis/stats/{filename}")
     if path.exists():
         return pd.read_csv(path)
@@ -112,16 +155,41 @@ def load_stats_file(filename):
 
 @st.cache_data(ttl=900)
 def downsample_data(series, max_points=2000):
-    """Downsample series data for performance if too many points"""
+    """Downsample a Series for WebGL rendering performance.
+
+    When a time-series has more than *max_points* observations,
+    every n-th point is selected to reduce the browser payload.
+
+    Parameters
+    ----------
+    series : pd.Series
+        Input time-series.
+    max_points : int, default 2000
+        Maximum number of points to retain.
+
+    Returns
+    -------
+    pd.Series
+        The (possibly subsampled) series.
+    """
     if len(series) <= max_points:
         return series
-    # Use every nth point to reduce rendering load
     step = max(1, len(series) // max_points)
     return series.iloc[::step]
 
 @st.cache_data(ttl=900)
 def load_sunspots_data():
-    """Load historical sunspot number data"""
+    """Load the extended historical sunspot record (1818–present).
+
+    Reads ``data/sunspots_daily_clean.csv`` which contains SILSO
+    daily total sunspot numbers going back ~200 years.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame indexed by ``date`` with column ``sn``.
+        Returns an empty DataFrame if the file is missing.
+    """
     sunspot_path = Path("data/sunspots_daily_clean.csv")
     if not sunspot_path.exists():
         st.warning(f"Sunspot data not found at {sunspot_path}")
@@ -191,6 +259,12 @@ st.markdown("---")
 # ---------------------------------------------------------------------------
 
 def page_overview():
+    """Render the System Overview page.
+
+    Displays paired time-series of solar drivers (SSN, F10.7, Flares)
+    and terrestrial responses (Kp, Dst) with 27-day rolling means
+    and storm-threshold reference lines.
+    """
     st.title("System Overview: Time-Series Diagnostics")
     st.markdown("Macro-level inspection of solar drivers and terrestrial responses.")
 
@@ -291,6 +365,12 @@ def page_overview():
 # ---------------------------------------------------------------------------
 
 def page_smoothing():
+    """Render the Data Smoothing page.
+
+    Lets the user compare Simple Moving Average (SMA) and Savitzky-Golay
+    polynomial filters on any numeric variable, with configurable
+    window lengths and polynomial orders.
+    """
     st.title("Data Smoothing & Noise Filtration")
     st.markdown("Apply digital filters to isolate macro trends from raw solar indices.")
     
@@ -339,6 +419,11 @@ def page_smoothing():
 # ---------------------------------------------------------------------------
 
 def page_correlations():
+    """Render the Correlation Matrix page.
+
+    Features a Pearson/Spearman heatmap of user-selected variables
+    and an interactive bivariate scatter with OLS regression trendline.
+    """
     st.title("Correlation & Relationship Analytics")
     
     st.info(
@@ -385,6 +470,13 @@ def page_correlations():
 # ---------------------------------------------------------------------------
 
 def page_lag_analysis():
+    """Render the Lag-Time Analysis page.
+
+    Contains three analytical sections:
+    1. Bivariate Lag-Correlation — interactive Pearson r vs lag chart.
+    2. Superposed Epoch Analysis (SEA) — align triggers at Day 0.
+    3. Transit Tracking — histogram of CME travel times.
+    """
     st.title("Lag-Time & Superposed Epoch Analysis")
     st.markdown("Chronological delay isolating solar causality from terrestrial consequence.")
     
@@ -413,11 +505,12 @@ def page_lag_analysis():
                                title=f"Correlation Impact: {driver_x} → {response_y}",
                                labels={"lag_days": "Lag (Days)", "pearson_r": "Pearson Correlation (r)"})
             fig_corr.add_vline(x=0, line_dash="dash", line_color="gray", opacity=0.5)
-            # Highlight the optimal lag
-            opt_row = corr_df.loc[corr_df["pearson_r"].idxmax()]
-            fig_corr.add_annotation(x=opt_row["lag_days"], y=opt_row["pearson_r"],
-                                  text=f"Peak: {opt_row['lag_days']}d (r={opt_row['pearson_r']:.2f})",
-                                  showarrow=True, arrowhead=1)
+            # Highlight the optimal lag (guard against all-NaN)
+            if corr_df["pearson_r"].notna().any():
+                opt_row = corr_df.loc[corr_df["pearson_r"].idxmax()]
+                fig_corr.add_annotation(x=opt_row["lag_days"], y=opt_row["pearson_r"],
+                                      text=f"Peak: {opt_row['lag_days']}d (r={opt_row['pearson_r']:.2f})",
+                                      showarrow=True, arrowhead=1)
             
             fig_corr.update_layout(height=400, margin=dict(l=0, r=0, t=40, b=0), hovermode="x unified")
             st.plotly_chart(fig_corr, width="stretch")
@@ -505,7 +598,18 @@ def page_lag_analysis():
 
 # Helper function for aurora visibility locations
 def get_aurora_visibility_locations(latitude):
-    """Return major cities/regions visible at given latitude"""
+    """Map an auroral boundary latitude to human-readable locations.
+
+    Parameters
+    ----------
+    latitude : float
+        Minimum geographic latitude where aurora is visible.
+
+    Returns
+    -------
+    str
+        Description of major cities or regions at that latitude.
+    """
     locations_north = {
         80: "Northern Canada, Greenland, Northern Scandinavia",
         70: "Alaska, Northern Canada, Northern Scandinavia",
@@ -527,6 +631,12 @@ def get_aurora_visibility_locations(latitude):
 # ---------------------------------------------------------------------------
 
 def page_geospatial_impact():
+    """Render the Geospatial Impact (Aurora Map) page.
+
+    Displays an interactive orthographic globe showing the auroral
+    oval extent for a user-selected historical date, computed from
+    the formula: boundary_lat = 68 − 3.6 × Kp.
+    """
     st.title("Geospatial Impact: Auroral Extent Mapping")
     st.markdown("Slide through time to observe how exact planetary disruption pushes auroral boundaries southwards.")
     
@@ -593,6 +703,11 @@ def page_geospatial_impact():
 # ---------------------------------------------------------------------------
 
 def page_storm_simulator():
+    """Render the Storm Simulator page.
+
+    Interactive G-Scale explorer mapping Kp indices (5–9) to real-world
+    infrastructure impacts on power grids, satellites, and communications.
+    """
     st.title("NOAA G-Scale Storm Simulator")
     st.markdown("Interactive exploration of how arbitrary scale metrics map to planetary consequences.")
     
@@ -646,6 +761,12 @@ def page_storm_simulator():
         st.plotly_chart(figure_kp_gauge_simulator, width="stretch")
 
 def page_physics_primer():
+    """Render the Physics Primer educational page.
+
+    Describes the Sunspot Number formula (R = K·(10G + I)),
+    F10.7 radio flux, the Kp planetary index, and the Dst ring
+    current with supporting imagery.
+    """
     st.title("Physics Primer")
     st.markdown("Detailed exploration of solar drivers and terrestrial magnetic responses.")
     
@@ -744,6 +865,12 @@ def page_physics_primer():
 # ---------------------------------------------------------------------------
 
 def page_solar_number_timeseries():
+    """Render the Solar Number Time Series page.
+
+    Displays 200+ years of SILSO sunspot data with a 365-day rolling
+    mean, a year-by-month heatmap, and a table of notable historical
+    solar events.
+    """
     st.title("Solar Number Time Series & Historical Analysis")
     st.markdown("Explore historical sunspot numbers, cyclical patterns, and major solar events.")
     
@@ -881,6 +1008,12 @@ def page_solar_number_timeseries():
 # ---------------------------------------------------------------------------
 
 def page_extreme_events():
+    """Render the Extreme Events page.
+
+    Uses Z-score analysis to flag statistical outliers in user-selected
+    variables (Kp, SSN, F10.7, or total X-ray flares).  Visualises
+    flagged points on a time-series with a colour-coded Z-score scale.
+    """
     st.title("Extreme Events Detection & Analysis")
     st.markdown("Identify and analyze outlier days with abnormal geomagnetic and solar activity.")
     
@@ -935,6 +1068,12 @@ def page_extreme_events():
 # ---------------------------------------------------------------------------
 
 def page_periodicity():
+    """Render the Periodicity Analysis page.
+
+    Offers FFT (global spectral) and CWT (temporal wavelet) analysis
+    of any numeric variable to detect dominant cycles (11-year, 27-day,
+    etc.).
+    """
     st.title("Periodicity & Solar Cycle Analysis")
     st.markdown("Discover dominant cycles and periodic patterns in solar/geomagnetic activity.")
     
@@ -983,6 +1122,11 @@ def page_periodicity():
 # ---------------------------------------------------------------------------
 
 def page_phase_climatology():
+    """Render the Phase-Locked Climatology page.
+
+    Bins Kp observations by solar-cycle phase to reveal which parts
+    of the 11-year cycle have the highest storm probability.
+    """
     st.title("Phase-Locked Climatology: Solar Cycle Risk Zones")
     st.markdown("Identify 'danger zones' within the 11-year solar cycle where geomagnetic storms are most likely.")
     
@@ -1041,6 +1185,12 @@ def page_phase_climatology():
 # ---------------------------------------------------------------------------
 
 def page_hysteresis():
+    """Render the Hysteresis Analysis page.
+
+    Scatter-plots Sunspot proxy vs Kp, colour-coded by rising/falling
+    solar-cycle phase, revealing whether the magnetosphere responds
+    differently at the same activity level depending on cycle history.
+    """
     st.title("Hysteresis Analysis: Solar Cycle Phase Effects")
     st.markdown("Compare geomagnetic response (Kp) to sunspot activity across rising vs. falling cycle phases.")
     
@@ -1062,7 +1212,7 @@ def page_hysteresis():
         if sunspot_column_hysteresis in dataframe_filtered.columns and kp_column_hysteresis in dataframe_filtered.columns:
             try:
                 hysteresis_analysis_dataframe = analyze_hysteresis(
-                    dataframe_filtered, sn_col=sunspot_column_hysteresis, kp_col=kp_column_hysteresis, save_path="Images_dashboard/hysteresis_phase.png"
+                    dataframe_filtered, sn_col=sunspot_column_hysteresis, kp_col=kp_column_hysteresis
                 )
                 
                 rising_phase_data = hysteresis_analysis_dataframe[hysteresis_analysis_dataframe['phase_type'] == 'Rising']
@@ -1102,6 +1252,12 @@ def page_hysteresis():
 # ---------------------------------------------------------------------------
 
 def page_monthly_stats():
+    """Render the Temporal Aggregation page.
+
+    Allows users to toggle between Monthly, Quarterly, and Yearly
+    resampling of SSN and Kp index data, with dynamic chart titles
+    and a statistics summary table.
+    """
     column_monthly_config, column_monthly_viz = st.columns([1, 2])
     
     with column_monthly_config:
@@ -1165,6 +1321,11 @@ def page_monthly_stats():
 # ---------------------------------------------------------------------------
 
 def page_data_sources():
+    """Render the Data Sources & Provenance page.
+
+    Documents the four primary telemetry providers (SILSO, NASA OMNIWeb,
+    NOAA NCEI/SWPC, WDC Kyoto) with links and descriptions.
+    """
     st.title("Data Sources & Provenance")
     st.markdown("This dashboard relies on high-fidelity telemetry from authoritative space weather institutions.")
     
@@ -1189,6 +1350,10 @@ def page_data_sources():
 
 
 def page_project_details():
+    """Render the Project Details & Team page.
+
+    Shows the mission statement and team member credits.
+    """
     st.title("Project Details & Team")
     st.markdown("### The Mission")
     st.markdown(
