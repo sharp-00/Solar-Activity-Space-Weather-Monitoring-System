@@ -136,8 +136,8 @@ def parse_ssn_recent(path: Path) -> pd.DataFrame:
                 if len(parts) < 4: continue
                 try:
                     year, month, day = int(parts[0]), int(parts[1]), int(parts[2])
-                    ssn = float(parts[3]) if parts[3] not in ("-1","999") else np.nan
-                    ssn_std = float(parts[4]) if len(parts) > 4 and parts[4] not in ("-1","999") else np.nan
+                    ssn = float(parts[4]) if len(parts) > 4 and parts[4] not in ("-1","999") else np.nan
+                    ssn_std = float(parts[5]) if len(parts) > 5 and parts[5] not in ("-1","999") else np.nan
                     rows.append({"year": year, "month": month, "day": day,
                                  "ssn": ssn, "ssn_std": ssn_std})
                 except (ValueError, IndexError):
