@@ -4,18 +4,22 @@ An advanced, interactive analytics dashboard for monitoring solar activity and i
 
 ## Quick Start
 
-### 1. Install Dependencies
+### 1. Install Dependencies and Create Environment
 ```bash
-pip install -r requirements.txt
+conda env create -f environment.yml
+```
+### 2. Activate Environment
+```bash
+conda activate solar_analysis
 ```
 
-### 2. Fetch Data
+### 3. Fetch Data
 First-time data ingestion (fetches SILSO, OMNIWeb, and NOAA feeds):
 ```bash
 python3 download_data.py
 ```
 
-### 3. Launch Dashboard
+### 4. Launch Dashboard
 ```bash
 streamlit run dashboard.py
 ```

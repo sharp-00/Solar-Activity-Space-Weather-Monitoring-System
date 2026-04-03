@@ -1,0 +1,12 @@
+name: solar_analysis
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.11  # <--- This ACTUALLY installs the version
+  - pandas>=2.0
+  - numpy>=1.26
+  - scipy>=1.12
+  - pip:
+      - streamlit>=1.35
+      - PyWavelets>=1.9
