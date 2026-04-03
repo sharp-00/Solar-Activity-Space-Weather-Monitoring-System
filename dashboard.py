@@ -71,38 +71,64 @@ st.markdown("""
 # ---------------------------------------------------------------------------
 
 @st.cache_data(ttl=900)
+import os
+import time
+import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from scipy.signal import savgol_filter
+from pathlib import Path
+from streamlit_option_menu import option_menu
+import sys
+
+sys.path.insert(0, str(Path(__file__).parent))
+from analysis import (
+    cross_correlation, find_extreme_events, solar_cycle_phase,
+    compute_monthly_stats, analyze_periodicity, predictive_dominance,
+    analyze_phase_locked_climatology, analyze_hysteresis
+)
+from ingest import main as run_ingest
+from clean import run_pipeline as run_clean
+
+# ---------------------------------------------------------------------------
+# Config & Professional UI Setup
+# ---------------------------------------------------------------------------
+st.set_page_config(
+    page_title="Space Weather Analytics",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
+
+# ---------------------------------------------------------------------------
+# SMART LOADER (24-Hour Cache Lock)
+# ---------------------------------------------------------------------------
+@st.cache_data
 def load_data():
-    csv_path = Path("data/clean/solar_weather_daily.csv")
+    """
+    Loads data instantly from Parquet. Only runs the heavy ingestion pipeline 
+    if the parquet file is missing or older than 24 hours.
+    """
+    file_path = Path("data/clean/solar_weather_daily.parquet")
+    needs_update = True
     
-    if not csv_path.exists():
-        st.warning("⚠️ **First-time setup detected.** High-fidelity solar telemetry is missing from the cloud environment.")
-        
-        with st.status("🚀 **Initializing Data Pipeline...**", expanded=True) as status:
-            import subprocess
-            import os
+    if file_path.exists():
+        file_age_hours = (time.time() - os.path.getmtime(file_path)) / 3600
+        if file_age_hours < 24:
+            needs_update = False
             
-            st.write("1. 📥 **Fetching raw data from NASA/NOAA/SILSO...**")
-            ingest_process = subprocess.run([sys.executable, "ingest.py"], capture_output=True, text=True)
-            if ingest_process.returncode != 0:
-                st.error("Data ingestion failed. Check network connectivity.")
-                st.code(ingest_process.stderr)
-                st.stop()
+    if needs_update:
+        with st.status("Fetching latest space weather updates..."):
+            run_ingest()
+            run_clean()
             
-            st.write("2. 🧹 **Harmonizing and cleaning datasets...**")
-            clean_process = subprocess.run([sys.executable, "clean.py"], capture_output=True, text=True)
-            if clean_process.returncode != 0:
-                st.error("Data cleaning failed.")
-                st.code(clean_process.stderr)
-                st.stop()
-            
-            status.update(label="✅ **Data Pipeline Synchronization Complete!**", state="complete", expanded=False)
-        
-        st.success("Modernized dataset is now synchronized. Reloading dashboard components...")
-        st.rerun()
+    return pd.read_parquet(file_path)
 
-    dataframe = pd.read_csv(csv_path, parse_dates=["date"], index_col="date")
-    return dataframe
+# Initialize the data ONCE. 
+df = load_data()
 
+# --- Your UI code continues here ---
 @st.cache_data(ttl=900)
 def load_stats_file(filename):
     path = Path(f"data/analysis/stats/{filename}")

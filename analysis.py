@@ -13,46 +13,28 @@ import matplotlib.pyplot as plt
 # Cross-correlation
 # ---------------------------------------------------------------------------
 
-def cross_correlation(
-    x: pd.Series,
-    y: pd.Series,
-    max_lag: int = 30,
-) -> pd.DataFrame:
+def cross_correlation(x: pd.Series, y: pd.Series, max_lag: int = 30) -> pd.DataFrame:
     """
     Compute Pearson r between x and y at integer lags from -max_lag to +max_lag.
-
-    Convention: positive lag means x leads y (x is shifted forward in time).
-
-    Parameters
-    ----------
-    x, y     : aligned Series (NaN rows dropped pairwise per lag)
-    max_lag  : maximum absolute lag in days
-
-    Returns
-    -------
-    DataFrame with columns: lag_days, pearson_r, n
+    Convention: positive lag means x leads y.
     """
     records = []
     for lag in range(-max_lag, max_lag + 1):
-        if lag >= 0:
-            xs = x.iloc[lag:].values
-            ys = y.iloc[: len(x) - lag].values
-        else:
-            xs = x.iloc[: len(x) + lag].values
-            ys = y.iloc[-lag:].values
-
-        # Pairwise valid
-        mask = ~np.isnan(xs) & ~np.isnan(ys)
-        n = mask.sum()
+        # Shift y backwards/forwards in time
+        y_shifted = y.shift(-lag)
+        
+        # Calculate valid pairs (n)
+        valid_mask = x.notna() & y_shifted.notna()
+        n = valid_mask.sum()
+        
         if n < 10:
             records.append({"lag_days": lag, "pearson_r": np.nan, "n": n})
-            continue
-        r, _ = pearsonr(xs[mask], ys[mask])
-        records.append({"lag_days": lag, "pearson_r": r, "n": n})
-
+        else:
+            # Pandas native correlation handles the NaN dropping automatically
+            r = x.corr(y_shifted)
+            records.append({"lag_days": lag, "pearson_r": r, "n": n})
+            
     return pd.DataFrame(records)
-
-
 # ---------------------------------------------------------------------------
 # Extreme events
 # ---------------------------------------------------------------------------
