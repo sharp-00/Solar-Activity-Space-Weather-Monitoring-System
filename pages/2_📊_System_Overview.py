@@ -17,6 +17,15 @@ render_refresh_sidebar()
 
 st.title("📊 System Overview: Time-Series Diagnostics")
 
+with st.expander("ℹ️ What We Are Analyzing: System Overview", expanded=False):
+    st.markdown("""
+    - **What we are doing:** We map cause (solar eruptions, F10.7, SSN) and effect (Kp index, Dst drop) concurrently.
+    - **Goal:** To provide a single unified executive dashboard showing the entire cascade of energy transfer from the Sun to the Earth's magnetosphere. This is where you see the holistic "weather forecast" taking place in real time or selected historical intervals.
+    """)
+
+
+st.info("💡 **Historical Trivia:** The largest recorded cascade of solar energy hitting Earth was the **Carrington Event (1859)**. A massive CME impacted the magnetosphere, causing telegraph lines to spark and catch fire as geomagnetically induced currents surged through the copper wires.")
+
 df_all  = load_main_data()
 kp_df   = load_kp_data()
 dst_df  = load_dst_data()

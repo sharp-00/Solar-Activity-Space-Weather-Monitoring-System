@@ -16,6 +16,15 @@ apply_theme(); auto_refresh_check(); render_refresh_sidebar()
 
 st.title("⚠️ Extreme Events Detection")
 
+with st.expander("ℹ️ What We Are Analyzing: Extreme Events", expanded=False):
+    st.markdown("""
+    - **What we are doing:** Utilizing thresholding and $Z$-score outlier detection ($>2.5\sigma$) to automatically flag massive anomalies in the time-series.
+    - **Goal:** Historical identification. Instead of burying massive events (like the Halloween Solar Storms or the Bastille Day Flare) inside massive statistical averages, we explicitly hunt for them to review their specific, unique kinetic signatures.
+    """)
+
+
+st.info("💡 **Historical Trivia:** The **Halloween Storms (Oct-Nov 2003)** were so intense (Kp 9, Dst -383 nT) that they shut down the MARTIE martian radiation experiment in orbit around Mars, forced aircraft to re-route globally, and damaged 28 satellites.")
+
 df_main = render_date_filter(load_main_data())
 kp_df   = load_kp_data()
 dst_df  = load_dst_data()

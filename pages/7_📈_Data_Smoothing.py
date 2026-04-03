@@ -17,6 +17,15 @@ apply_theme(); auto_refresh_check(); render_refresh_sidebar()
 
 st.title("📈 Data Smoothing & Noise Filtration")
 
+with st.expander("ℹ️ What We Are Analyzing: Data Smoothing", expanded=False):
+    st.markdown("""
+    - **What we are doing:** Applying different mathematical filters (e.g., Simple Moving Averages, Savitzky-Golay) to raw telemetry signals.
+    - **Goal:** Real-world data is inherently noisy due to ground sensor fluctuations, instrument switching, and the Sun's 27-day axial rotation. We attempt to discover the "true baseline" by filtering out this high-frequency noise without losing the signal of authentic anomalies.
+    """)
+
+
+st.info("💡 **Historical Trivia:** Observational noise in early historical SSN data often came from atmospheric cloud cover over observatories or variations in the telescope optics of the 18th and 19th centuries, necessitating algorithmic smoothing to find true cyclic trends.")
+
 try:
     df_main = render_date_filter(load_main_data())
     kp_df   = load_kp_data()

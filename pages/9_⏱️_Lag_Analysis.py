@@ -18,6 +18,15 @@ st.set_page_config(page_title="Lag Analysis", page_icon="⏱️", layout="wide")
 apply_theme(); auto_refresh_check(); render_refresh_sidebar()
 
 st.title("⏱️ Lag-Time & Superposed Epoch Analysis")
+
+with st.expander("ℹ️ What We Are Analyzing: Lag Analysis", expanded=False):
+    st.markdown("""
+    - **What we are doing:** Calculating cross-correlations by shifting one time-series forward or backward by "lags" (ranging from -30 to +30 days).
+    - **Goal:** Space is vast. Light (causing $F10.7$ and X-ray flares) takes 8.3 minutes to reach Earth, while plasma (Coronal Mass Ejections causing $Kp$ spikes and $Dst$ drops) takes anywhere from 1 to 4 days. Lag Analysis mathematically measures the exact "transit time" of these particle streams.
+    """)
+
+st.info("💡 **Historical Trivia:** While CMEs usually take 2 to 4 days to reach Earth, the August 1972 solar storm CME made the transit in a record-breaking **~14.6 hours**. The resulting magnetic fluctuations triggered dozens of magnetic sea mines along the coast of Vietnam.")
+
 df_main = render_date_filter(load_main_data())
 kp_df   = load_kp_data()
 

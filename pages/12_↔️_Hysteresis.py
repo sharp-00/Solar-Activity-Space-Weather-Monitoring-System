@@ -16,6 +16,15 @@ apply_theme(); auto_refresh_check(); render_refresh_sidebar()
 
 st.title("↔️ Hysteresis Analysis: Solar Cycle Phase Effects")
 
+with st.expander("ℹ️ What We Are Analyzing: Hysteresis", expanded=False):
+    st.markdown("""
+    - **What we are doing:** Plotting Solar Activity (SSN) against Geomagnetic Activity (Kp) and colorizing the points based on whether the cycle is actively *rising* to a peak or *falling* away from it.
+    - **Goal:** To expose an asymmetry in space weather: the Earth is battered by more severe storms *after* the solar maximum has passed. During the declining phase, coronal holes migrate towards the solar equator, spewing recurrent high-speed solar wind streams. The sun is calming down, but the storms are getting worse!
+    """)
+
+
+st.info("💡 **Historical Trivia:** The hysteresis effect implies delayed consequences. It explains why satellite operators experience worse atmospheric drag anomalies years after the sunspot peak has passed, catching unprepared orbital trajectory calculations off guard.")
+
 df_main = render_date_filter(load_main_data())
 kp_df   = load_kp_data()
 ssn_df  = load_sunspots_data()

@@ -15,6 +15,15 @@ st.set_page_config(page_title="Phase Climatology", page_icon="🔄", layout="wid
 apply_theme(); auto_refresh_check(); render_refresh_sidebar()
 
 st.title("🔄 Phase-Locked Climatology: Solar Cycle Risk Zones")
+
+with st.expander("ℹ️ What We Are Analyzing: Phase Climatology", expanded=False):
+    st.markdown("""
+    - **What we are doing:** Normalizing time into "fractions of a solar cycle" (where $0$ is the start of a cycle and $1.0$ is the end) and binning storm occurrences into these fractional buckets.
+    - **Goal:** To map the "danger zone". It answers exactly *where* in the 11-year calendar geomagnetic storms are most likely. It turns out storms do not always happen exactly at Solar Maximum!
+    """)
+
+st.info("💡 **Historical Trivia:** Some of the most devastating storms occur *after* Solar Maximum. The infamous Halloween Storms of 2003 happened 3.5 years *after* the peak of Solar Cycle 23, deep into the declining phase.")
+
 df_main = render_date_filter(load_main_data())
 kp_df   = load_kp_data()
 

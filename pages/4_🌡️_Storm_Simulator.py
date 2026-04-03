@@ -14,6 +14,15 @@ auto_refresh_check()
 render_refresh_sidebar()
 
 st.title("🌡️ NOAA G-Scale Storm Simulator")
+
+with st.expander("ℹ️ What We Are Analyzing: Storm Simulator", expanded=False):
+    st.markdown("""
+    - **What we are doing:** A simulated environment testing different threshold bounds of geomagnetic storms categorized from NOAA G1 (minor) to G5 (extreme).
+    - **Goal:** To translate abstract physical units (like $nT$ or $Kp$ numbers) into understandable real-world socio-economic impacts. It maps the severity indices directly to threats against satellite orbits, power grids, and aviation communications.
+    """)
+
+st.info("💡 **Historical Trivia:** In March 1989, a severe G5 geomagnetic storm induced enormous electrical currents in the ground, completely melting a massive power transformer in New Jersey and causing a 9-hour system-wide blackout across the entire Hydro-Québec power grid.")
+
 st.markdown("Slide through storm categories to see real-world consequences.")
 
 LEVELS = ["Quiet (Kp 0–3)", "Active (Kp 4)", "G1 Minor (Kp 5)",

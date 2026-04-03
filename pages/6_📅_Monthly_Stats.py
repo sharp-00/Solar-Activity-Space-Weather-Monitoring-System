@@ -16,6 +16,15 @@ apply_theme(); auto_refresh_check(); render_refresh_sidebar()
 
 st.title("📅 Monthly Statistics & Temporal Aggregation")
 
+with st.expander("ℹ️ What We Are Analyzing: Monthly Stats", expanded=False):
+    st.markdown("""
+    - **What we are doing:** Re-sampling and aggregating high-frequency daily telemetry into monthly bins.
+    - **Goal:** To strip away short-term perturbations (like solar rotation or singular flares) to reveal the majestic, long-lasting climatic shifts of the solar cycle.
+    """)
+
+
+st.info("💡 **Historical Trivia:** Solar cycles average 11 years, but they can vary. Solar Cycle 4 (beginning in 1784) lasted 13.6 years, while Solar Cycle 2 (1766) was only 9 years long.")
+
 try:
     df_main = render_date_filter(load_main_data())
     kp_df   = load_kp_data()

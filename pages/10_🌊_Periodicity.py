@@ -15,6 +15,15 @@ st.set_page_config(page_title="Periodicity", page_icon="🌊", layout="wide")
 apply_theme(); auto_refresh_check(); render_refresh_sidebar()
 
 st.title("🌊 Periodicity & Solar Cycle Analysis")
+
+with st.expander("ℹ️ What We Are Analyzing: Periodicity", expanded=False):
+    st.markdown("""
+    - **What we are doing:** Moving from the time domain into the frequency domain using Fast Fourier Transforms (FFT) and Continuous Wavelet Transforms (CWT, usually Morlet wavelets).
+    - **Goal:** Instead of just "eyeballing" the 11-year cycle, this rigorously extracts the dominant spectral power peaks. It proves mathematically that a consistent period exists, and identifies secondary harmonic periods (like the ~27 day solar rotation).
+    """)
+
+st.info("💡 **Historical Trivia:** The ~11-year periodicity was discovered by amateur astronomer **Heinrich Schwabe** in 1843. He spent 17 years looking for a hypothetical planet inside Mercury's orbit by tracking sunspots, and accidentally discovered the solar cycle instead!")
+
 df = render_date_filter(load_main_data())
 if df.empty:
     st.warning("No data."); st.stop()

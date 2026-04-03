@@ -17,6 +17,15 @@ apply_theme(); auto_refresh_check(); render_refresh_sidebar()
 
 st.title("🌍 Geospatial Impact: Auroral Extent Mapping")
 
+with st.expander("ℹ️ What We Are Analyzing: Geospatial Impact", expanded=False):
+    st.markdown("""
+    - **What we are doing:** We calculate and project the "auroral oval" onto an Earth map using historical / simulated Kp numbers.
+    - **Goal:** To visually answer the question "How far south (or north) will the aurora be visible?". Severe geomagnetic storms widen the auroral footprint, drastically expanding the latitude range of visible Northern/Southern lights and mapping geomagnetically induced current (GIC) risk.
+    """)
+
+
+st.info("💡 **Historical Trivia:** During the 1859 Carrington Event, the auroral oval was pushed so far toward the equator that people in the Caribbean (Cuba, Jamaica) and Hawaii reported seeing the Northern Lights. Gold miners in the Rocky Mountains woke up and began making breakfast, thinking it was morning!")
+
 try:
     df_main = load_main_data()
     kp_df   = load_kp_data()

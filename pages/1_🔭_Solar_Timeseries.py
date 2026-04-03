@@ -16,6 +16,15 @@ apply_theme(); auto_refresh_check(); render_refresh_sidebar()
 
 st.title("🔭 Solar Number Time Series & Historical Analysis")
 
+with st.expander("ℹ️ What We Are Analyzing: Solar Timeseries", expanded=False):
+    st.markdown("""
+    - **What we are doing:** We plot decades of historical sunspot, radio flux, and flare data on a continuous timeline. 
+    - **Goal:** To physically visualize the ~11-year solar cycle (Schwabe cycle) across multiple generations. By comparing the crests and troughs (Solar Maximums and Minimums), we identify historical patterns in solar volatility.
+    """)
+
+
+st.info("💡 **Historical Trivia:** The **Maunder Minimum** (1645–1715) was a period when sunspots became exceedingly rare. This era coincided with the 'Little Ice Age' in Europe and North America. Conversely, the highest explicitly recorded sunspot number occurred during Solar Cycle 19 in 1957 (SSN peaking over 350).")
+
 try:
     df = load_sunspots_data()
     if df.empty:

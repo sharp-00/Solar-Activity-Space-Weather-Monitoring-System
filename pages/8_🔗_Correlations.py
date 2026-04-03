@@ -16,6 +16,15 @@ apply_theme(); auto_refresh_check(); render_refresh_sidebar()
 
 st.title("🔗 Correlation & Relationship Analytics")
 
+with st.expander("ℹ️ What We Are Analyzing: Correlations", expanded=False):
+    st.markdown("""
+    - **What we are doing:** Computing the Pearson Correlation Coefficients ($r$) between the various measured indices to construct a correlation matrix.
+    - **Goal:** Looking for collinearity. We want to statistically prove that as Sunspot Number goes up, the Solar Radio Flux ($F10.7$) reliably goes up with it, and that high flares correlate to subsequent geomagnetic disturbances.
+    """)
+
+
+st.info("💡 **Historical Trivia:** In 1946, Arthur Covington verified the strict correlation between the F10.7 cm radio flux and Sunspot Number using a repurposed military radar, proving that you could 'listen' to solar activity even on cloudy days.")
+
 try:
     df_main = render_date_filter(load_main_data())
     kp_df   = load_kp_data()
