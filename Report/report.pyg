@@ -1,0 +1,20 @@
+from scipy.stats import pearsonr
+
+def cross_correlation(x, y, max_lag=30):
+    """Pearson r between x and y at integer lags."""
+    records = []
+    for lag in range(-max_lag, max_lag + 1):
+        if lag >= 0:
+            xs = x.iloc[lag:].values
+            ys = y.iloc[:len(x)-lag].values
+        else:
+            xs = x.iloc[:len(x)+lag].values
+            ys = y.iloc[-lag:].values
+        mask = ~np.isnan(xs) & ~np.isnan(ys)
+        n = mask.sum()
+        if n < 10:
+            records.append({"lag": lag, "r": np.nan})
+            continue
+        r, _ = pearsonr(xs[mask], ys[mask])
+        records.append({"lag": lag, "r": r, "n": n})
+    return pd.DataFrame(records)

@@ -1,0 +1,71 @@
+\begin{thebibliography}{10}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Bartels(1939)]{bartels_kp_1939}
+J.~Bartels.
+\newblock The standardized index, {Ks}, and the planetary index, {Kp}.
+\newblock \emph{IATME Bulletin}, 12b:\penalty0 97, 1939.
+
+\bibitem[Clette et~al.(2014)Clette, Svalgaard, Vaquero, and
+  Cliver]{clette_sunspot_2014}
+F.~Clette, L.~Svalgaard, J.~M. Vaquero, and E.~W. Cliver.
+\newblock The revised {Brussels--SIDC} sunspot number ({SN} v2.0).
+\newblock \emph{Space Science Reviews}, 186:\penalty0 35--103, 2014.
+\newblock \doi{10.1007/s11214-014-0074-2}.
+
+\bibitem[Gonzalez et~al.(1994)Gonzalez, Joselyn, Kamide, Kroehl, Rostoker,
+  Tsurutani, and Vasyliunas]{gonzalez_storms_1994}
+W.~D. Gonzalez, J.~A. Joselyn, Y.~Kamide, H.~W. Kroehl, G.~Rostoker, B.~T.
+  Tsurutani, and V.~M. Vasyliunas.
+\newblock What is a geomagnetic storm?
+\newblock \emph{Journal of Geophysical Research: Space Physics}, 99\penalty0
+  (A4):\penalty0 5771--5792, 1994.
+\newblock \doi{10.1029/93JA02867}.
+
+\bibitem[Hathaway(2015)]{hathaway_solar_2015}
+D.~H. Hathaway.
+\newblock The solar cycle.
+\newblock \emph{Living Reviews in Solar Physics}, 12\penalty0 (4), 2015.
+\newblock \doi{10.1007/lrsp-2015-4}.
+
+\bibitem[McKinney(2010)]{mckinney_pandas_2010}
+W.~McKinney.
+\newblock Data structures for statistical computing in {Python}.
+\newblock In \emph{Proceedings of the 9th Python in Science Conference}, pages
+  51--56, 2010.
+
+\bibitem[Pulkkinen(2007)]{pulkkinen_space_weather_2007}
+T.~Pulkkinen.
+\newblock Space weather: Terrestrial perspective.
+\newblock \emph{Living Reviews in Solar Physics}, 4\penalty0 (1), 2007.
+\newblock \doi{10.12942/lrsp-2007-1}.
+
+\bibitem[{Streamlit Inc.}(2020)]{streamlit_2020}
+{Streamlit Inc.}
+\newblock Streamlit: The fastest way to build and share data apps.
+\newblock \url{https://streamlit.io/}, 2020.
+\newblock Accessed: 2026-04-03.
+
+\bibitem[Sugiura(1964)]{sugiura_dst_1964}
+M.~Sugiura.
+\newblock Hourly values of equatorial {Dst} for the {IGY}.
+\newblock \emph{Annals of the International Geophysical Year}, 35:\penalty0
+  9--45, 1964.
+
+\bibitem[Tapping(2013)]{tapping_f107_2013}
+K.~F. Tapping.
+\newblock The 10.7\,cm solar radio flux ({F10.7}).
+\newblock \emph{Space Weather}, 11:\penalty0 394--406, 2013.
+\newblock \doi{10.1002/swe.20064}.
+
+\bibitem[Temmer(2021)]{temmer_space_2021}
+M.~Temmer.
+\newblock Space weather: the solar perspective.
+\newblock \emph{Living Reviews in Solar Physics}, 18\penalty0 (4), 2021.
+\newblock \doi{10.1007/s41116-021-00030-3}.
+
+\end{thebibliography}

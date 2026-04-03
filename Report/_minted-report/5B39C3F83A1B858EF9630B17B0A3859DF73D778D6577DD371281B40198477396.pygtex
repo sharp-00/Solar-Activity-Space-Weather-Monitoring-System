@@ -1,0 +1,22 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+\PYG{k+kn}{from}\PYG{+w}{ }\PYG{n+nn}{scipy.stats}\PYG{+w}{ }\PYG{k+kn}{import} \PYG{n}{pearsonr}
+
+\PYG{k}{def}\PYG{+w}{ }\PYG{n+nf}{cross\PYGZus{}correlation}\PYG{p}{(}\PYG{n}{x}\PYG{p}{,} \PYG{n}{y}\PYG{p}{,} \PYG{n}{max\PYGZus{}lag}\PYG{o}{=}\PYG{l+m+mi}{30}\PYG{p}{):}
+\PYG{+w}{    }\PYG{l+s+sd}{\PYGZdq{}\PYGZdq{}\PYGZdq{}Pearson r between x and y at integer lags.\PYGZdq{}\PYGZdq{}\PYGZdq{}}
+    \PYG{n}{records} \PYG{o}{=} \PYG{p}{[]}
+    \PYG{k}{for} \PYG{n}{lag} \PYG{o+ow}{in} \PYG{n+nb}{range}\PYG{p}{(}\PYG{o}{\PYGZhy{}}\PYG{n}{max\PYGZus{}lag}\PYG{p}{,} \PYG{n}{max\PYGZus{}lag} \PYG{o}{+} \PYG{l+m+mi}{1}\PYG{p}{):}
+        \PYG{k}{if} \PYG{n}{lag} \PYG{o}{\PYGZgt{}=} \PYG{l+m+mi}{0}\PYG{p}{:}
+            \PYG{n}{xs} \PYG{o}{=} \PYG{n}{x}\PYG{o}{.}\PYG{n}{iloc}\PYG{p}{[}\PYG{n}{lag}\PYG{p}{:]}\PYG{o}{.}\PYG{n}{values}
+            \PYG{n}{ys} \PYG{o}{=} \PYG{n}{y}\PYG{o}{.}\PYG{n}{iloc}\PYG{p}{[:}\PYG{n+nb}{len}\PYG{p}{(}\PYG{n}{x}\PYG{p}{)}\PYG{o}{\PYGZhy{}}\PYG{n}{lag}\PYG{p}{]}\PYG{o}{.}\PYG{n}{values}
+        \PYG{k}{else}\PYG{p}{:}
+            \PYG{n}{xs} \PYG{o}{=} \PYG{n}{x}\PYG{o}{.}\PYG{n}{iloc}\PYG{p}{[:}\PYG{n+nb}{len}\PYG{p}{(}\PYG{n}{x}\PYG{p}{)}\PYG{o}{+}\PYG{n}{lag}\PYG{p}{]}\PYG{o}{.}\PYG{n}{values}
+            \PYG{n}{ys} \PYG{o}{=} \PYG{n}{y}\PYG{o}{.}\PYG{n}{iloc}\PYG{p}{[}\PYG{o}{\PYGZhy{}}\PYG{n}{lag}\PYG{p}{:]}\PYG{o}{.}\PYG{n}{values}
+        \PYG{n}{mask} \PYG{o}{=} \PYG{o}{\PYGZti{}}\PYG{n}{np}\PYG{o}{.}\PYG{n}{isnan}\PYG{p}{(}\PYG{n}{xs}\PYG{p}{)} \PYG{o}{\PYGZam{}} \PYG{o}{\PYGZti{}}\PYG{n}{np}\PYG{o}{.}\PYG{n}{isnan}\PYG{p}{(}\PYG{n}{ys}\PYG{p}{)}
+        \PYG{n}{n} \PYG{o}{=} \PYG{n}{mask}\PYG{o}{.}\PYG{n}{sum}\PYG{p}{()}
+        \PYG{k}{if} \PYG{n}{n} \PYG{o}{\PYGZlt{}} \PYG{l+m+mi}{10}\PYG{p}{:}
+            \PYG{n}{records}\PYG{o}{.}\PYG{n}{append}\PYG{p}{(\PYGZob{}}\PYG{l+s+s2}{\PYGZdq{}lag\PYGZdq{}}\PYG{p}{:} \PYG{n}{lag}\PYG{p}{,} \PYG{l+s+s2}{\PYGZdq{}r\PYGZdq{}}\PYG{p}{:} \PYG{n}{np}\PYG{o}{.}\PYG{n}{nan}\PYG{p}{\PYGZcb{})}
+            \PYG{k}{continue}
+        \PYG{n}{r}\PYG{p}{,} \PYG{n}{\PYGZus{}} \PYG{o}{=} \PYG{n}{pearsonr}\PYG{p}{(}\PYG{n}{xs}\PYG{p}{[}\PYG{n}{mask}\PYG{p}{],} \PYG{n}{ys}\PYG{p}{[}\PYG{n}{mask}\PYG{p}{])}
+        \PYG{n}{records}\PYG{o}{.}\PYG{n}{append}\PYG{p}{(\PYGZob{}}\PYG{l+s+s2}{\PYGZdq{}lag\PYGZdq{}}\PYG{p}{:} \PYG{n}{lag}\PYG{p}{,} \PYG{l+s+s2}{\PYGZdq{}r\PYGZdq{}}\PYG{p}{:} \PYG{n}{r}\PYG{p}{,} \PYG{l+s+s2}{\PYGZdq{}n\PYGZdq{}}\PYG{p}{:} \PYG{n}{n}\PYG{p}{\PYGZcb{})}
+    \PYG{k}{return} \PYG{n}{pd}\PYG{o}{.}\PYG{n}{DataFrame}\PYG{p}{(}\PYG{n}{records}\PYG{p}{)}
+\end{Verbatim}
