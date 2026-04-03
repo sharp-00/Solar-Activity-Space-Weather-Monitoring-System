@@ -1,90 +1,83 @@
-# ☀️ Solar Activity & Space Weather Monitoring System
+# ☀️ Space Weather Analytics
 
-An advanced, interactive analytics dashboard for monitoring solar activity and its geospatial impacts on Earth. Built with **Python 3.x** and **Streamlit**, this project bridges the gap between raw astrophysical telemetry and actionable data science.
+Real-time & historical solar / geomagnetic data intelligence dashboard.
 
 ## Quick Start
 
-### 1. Install Dependencies and Create Environment
 ```bash
-conda env create -f requirements.yml
-```
-### 2. Activate Environment
-```bash
-conda activate solar_analysis
+pip install -r requirements.txt
+streamlit run app.py
 ```
 
-### 3. Fetch Data
-First-time data ingestion (fetches SILSO, OMNIWeb, and NOAA feeds):
-```bash
-python3 ingest.py
-```
+On first launch the dashboard auto-detects missing data and runs the pipeline.
+Use the **⚡ Fetch Latest Data** button in the sidebar at any time.
 
-## 4. Clean Data
-Fist-time after data ingestion.(i.e Step 3)
-```bash
-python3 clean.py
-```
+---
 
-### 5. Launch Dashboard
-```bash
-streamlit run dashboard.py
+## Structure
+
+```
+solar/
+├── app.py                  # Home page — KPI cards + global date filter
+├── pages/                  # 15 analysis pages (Streamlit auto-builds sidebar nav)
+│   ├── 1_🔭_Solar_Timeseries.py
+│   ├── 2_📊_System_Overview.py
+│   ├── 3_⚡_Physics_Primer.py
+│   ├── 4_🌡️_Storm_Simulator.py
+│   ├── 5_🌍_Geospatial_Impact.py
+│   ├── 6_📅_Monthly_Stats.py
+│   ├── 7_📈_Data_Smoothing.py
+│   ├── 8_🔗_Correlations.py
+│   ├── 9_⏱️_Lag_Analysis.py
+│   ├── 10_🌊_Periodicity.py
+│   ├── 11_🔄_Phase_Climatology.py
+│   ├── 12_↔️_Hysteresis.py
+│   ├── 13_⚠️_Extreme_Events.py
+│   ├── 14_🖥️_Data_Sources.py
+│   └── 15_ℹ️_Project_Details.py
+├── utils/
+│   ├── data_loader.py      # Cached parquet loaders + auto-migration from old CSVs
+│   ├── refresh.py          # 6h auto-refresh + manual button logic
+│   └── theme.py            # Shared CSS + Plotly layout defaults
+├── ingest.py               # Downloads raw data from 6 sources
+├── clean.py                # Harmonises & exports → data/clean/*.parquet
+├── analysis.py             # Statistical functions (FFT, wavelet, cross-corr…)
+└── requirements.txt
 ```
 
 ---
 
-## Project Architecture
+## Data Pipeline
 
+```
+ingest.py  →  data/raw/           (raw downloaded files)
+clean.py   →  data/clean/*.parquet (processed, typed, interpolated)
+```
+
+Run manually:
 ```bash
-Solar-Activity-Monitoring/
-├── dashboard.py         # Main entry point (Streamlit UI)
-├── analysis.py          # Core statistical engine (Cross-correlation, FFT, Wavelets)
-├── ingest.py            # Data loading and ingestion utilities
-├── download_data.py     # Data fetching and update pipeline
-├── clean.py             # Data cleaning and harmonization
-├── Images_dashboard/     # Visual resources for the primer and simulator
-└── data/                # Data storage (Cleaned and Analyzed stats)
-    ├── clean/           # Harmonized daily solar-weather datasets
-    └── analysis/stats/   # Pre-calculated statistical results (Lags, Epochs, etc.)
+python ingest.py   # ~10–20 min (first time; Kyoto has per-request sleep)
+python clean.py    # ~30 sec
 ```
 
 ---
 
-## Dashboard Modules
+## Data Refresh
 
-| Module | Purpose | Key Features |
-|:---|:---|:---|
-| **Solar Number Time Series** | Historical Analysis | 200 years of SILSO data, rolling means, and monthly heatmaps. |
-| **System Overview** | Cause & Effect | Direct contrast of solar drivers (SSN, F10.7) vs terrestrial response (Kp, Dst). |
-| **Physics Primer** | Education | Detailed science behind flares, CMEs, and the 11-year solar cycle. |
-| **Storm Simulator** | Interactive Tool | NOAA G-Scale simulator mapping Kp indices to global infrastructure impacts. |
-| **Geospatial Impact** | Aurora Mapping | Interactive 3D globe showing the expansion of the auroral oval during storms. |
-| **Lag-Time Analysis** | Causality Analysis | Superposed Epoch Analysis (SEA) to visualize the ~2-4 day delay of CME transit. |
-| **Periodicity Analysis** | Frequency Domain | FFT and Wavelet transforms to detect the 11-year and 27-day solar cycles. |
-| **Hysteresis & Climatology** | Cycle Dynamics | Analysis of the rising vs. falling phase effects on geomagnetic sensitivity. |
-
----
-
-## Science Behind the Data
-
--   **Temporal Alignment**: Uses Daily resolution to capture the 1-4 day lag between solar eruptions and geomagnetic impacts (invisible at monthly resolution).
--   **Noise Filtration**: Implements **Savitzky-Golay** polynomial filters to preserve the timing of extreme flare peaks that simple moving averages might flatten.
--   **Statistical Detection**: Uses **Z-Score analysis** to automatically flag extreme space weather events beyond 2.5σ deviations.
+| Trigger | Behaviour |
+|---|---|
+| App start (no data) | Pipeline runs automatically |
+| `> 6 hours` since last fetch | Auto-refresh on next page load |
+| **⚡ Fetch Latest** button | Manual, instant, visible on every page |
 
 ---
 
 ## Data Sources
 
--   **SILSO**: Sunspot Index and Long-term Solar Observations (Royal Observatory of Belgium).
--   **NASA OMNIWeb**: Hourly and Daily OMNI parameters (Dst Index, Solar Wind properties).
--   **NOAA SWPC**: Real-time X-ray flares and Kp telemetry.
--   **GFZ Potsdam**: Definitive historical Kp index archive.
-
----
-
-## The Team
--   **Mulumudi Dinesh Karthik**
--   **Vansh Gupta**
--   **Abhishek Menon**
--   **Shailendra Pratap Singh**
-
-Built with ❤️.
+| Source | Variables | URL |
+|---|---|---|
+| SILSO / Royal Observatory Brussels | Daily SSN | sidc.be |
+| NOAA NCEI / SWPC | F10.7, Flares, Kp | swpc.noaa.gov |
+| GFZ Potsdam | Kp/ap 3-hourly | kp.gfz.de |
+| NASA SPDF OMNI2 | Dst 1986–2004 | spdf.gsfc.nasa.gov |
+| WDC Kyoto | Dst 2005–present | wdc.kugi.kyoto-u.ac.jp |
