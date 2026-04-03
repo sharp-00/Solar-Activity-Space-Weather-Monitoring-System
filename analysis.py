@@ -10,31 +10,6 @@ try:
 except ImportError:
     _PYWT_OK = False
 
-def cross_correlation(x: pd.Series, y: pd.Series, max_lag: int = 30) -> pd.DataFrame:
-    """
-    Compute Pearson r between x and y at integer lags from -max_lag to +max_lag.
-    Convention: positive lag means x leads y.
-    """
-    records = []
-    for lag in range(-max_lag, max_lag + 1):
-        # Shift y backwards/forwards in time
-        y_shifted = y.shift(-lag)
-        
-        # Calculate valid pairs (n)
-        valid_mask = x.notna() & y_shifted.notna()
-        n = valid_mask.sum()
-        
-        if n < 10:
-            records.append({"lag_days": lag, "pearson_r": np.nan, "n": n})
-        else:
-            # Pandas native correlation handles the NaN dropping automatically
-            r = x.corr(y_shifted)
-            records.append({"lag_days": lag, "pearson_r": r, "n": n})
-            
-    return pd.DataFrame(records)
-# ---------------------------------------------------------------------------
-# Extreme events
-# ---------------------------------------------------------------------------
 try:
     import matplotlib
     matplotlib.use("Agg")          # non-interactive backend — safe in Streamlit
@@ -75,7 +50,6 @@ def cross_correlation(x: pd.Series, y: pd.Series, max_lag: int = 30) -> pd.DataF
 
 
 # ── Extreme events ────────────────────────────────────────────────────────────
->>>>>>> 13cb7cd93d84e80731ff958e001d47d175a08c8c
 
 def find_extreme_events(df: pd.DataFrame, col: str,
                          threshold_sigma: float = 2.5) -> pd.DataFrame:
