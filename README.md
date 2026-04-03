@@ -6,7 +6,7 @@ An advanced, interactive analytics dashboard for monitoring solar activity and i
 
 ### 1. Install Dependencies and Create Environment
 ```bash
-conda env create -f environment.yml
+conda env create -f requirements.yml
 ```
 ### 2. Activate Environment
 ```bash
