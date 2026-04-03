@@ -1,0 +1,13 @@
+Solar Ingest Manifest
+Generated: 2026-04-03 11:14 UTC
+========================================
+[OK] SSN (SILSO all formats)
+[OK] Kp flat file (GFZ)
+[OK] Kp recent (NOAA)
+[OK] F10.7 + Flares DSD (NCEI)
+[OK] X-ray 7-day (NOAA)
+[OK] DGD/Kp (NCEI)
+[OK] Dst OMNI2 (NASA)
+[OK] Dst Kyoto (WDC)
+[OK] Dst recent (NOAA)
+[OK] F10.7 JSON (NOAA)
