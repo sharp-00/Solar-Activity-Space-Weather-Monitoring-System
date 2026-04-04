@@ -1,3 +1,6 @@
+# We Hosted the dashboard on streamlit.
+https://saswms.streamlit.app/
+
 # Space Weather Analytics System
 
 An end-to-end data pipeline and interactive analytics dashboard that ingests, harmonises, and visualises key solar and geomagnetic indices—spanning nearly four decades (1986–present). The platform serves as a unified system to monitor the dynamic conditions of the Sun and the Earth's magnetosphere, addressing the fragmentation of existing data portals by bringing multiple historical and near-real-time indices into a single dashboard.
